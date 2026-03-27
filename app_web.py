@@ -62,30 +62,48 @@ with col1:
 with col2:
     esito = st.radio("Esito:", ["Fatto", "Errore"], horizontal=True)
 
-# 4. Visualizzazione Grafico
-event = st.plotly_chart(
-    create_court(), 
-    width='stretch', 
-    on_select="rerun", 
-    key="basket_chart",
-    config={'displayModeBar': True, 'scrollZoom': False}
-)
-
-# 5. Logica di Salvataggio
-if event and "selection" in event and event["selection"]["points"]:
-    pt = event["selection"]["points"][0]
-    pos_x, pos_y = pt.get("x"), pt.get("y")
-    
-    if pos_x is not None and pos_y is not None:
-        new_shot = {
-            "player": p_name, 
-            "x": pos_x, "y": pos_y,
-            "made": True if esito == "Fatto" else False,
-            "type": get_shot_type(pos_x, pos_y)
+# --- 4. Visualizzazione Grafico ---
+# Usiamo un contenitore per assicurarci che il tocco non venga "rubato" dallo scorrimento della pagina
+with st.container():
+    event = st.plotly_chart(
+        create_court(), 
+        use_container_width=True, # Prova a usare questo invece di stretch
+        on_select="rerun", 
+        key="basket_chart",
+        config={
+            'displayModeBar': False, # Nascondiamo la barra per evitare tocchi accidentali
+            'scrollZoom': False,
+            'staticPlot': False,
+            'doubleClick': 'reset',
+            'displaylogo': False
         }
-        st.session_state.shots.append(new_shot)
-        save_shots(st.session_state.shots)
-        st.rerun()
+    )
+
+# --- 5. Logica di Salvataggio (Più permissiva) ---
+if event and "selection" in event:
+    points = event["selection"].get("points", [])
+    
+    if len(points) > 0:
+        pt = points[0]
+        # Algoritmo di estrazione coordinate più robusto
+        pos_x = pt.get("x")
+        pos_y = pt.get("y")
+        
+        if pos_x is not None and pos_y is not None:
+            # Creiamo il record
+            new_shot = {
+                "player": p_name, 
+                "x": float(pos_x), 
+                "y": float(pos_y),
+                "made": True if esito == "Fatto" else False,
+                "type": get_shot_type(pos_x, pos_y)
+            }
+            
+            # Evitiamo di salvare lo stesso identico tocco due volte
+            if not st.session_state.shots or st.session_state.shots[-1] != new_shot:
+                st.session_state.shots.append(new_shot)
+                save_shots(st.session_state.shots)
+                st.rerun()
 
 # 6. Azioni e Tabella
 if st.session_state.shots:
