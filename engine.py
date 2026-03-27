@@ -1,33 +1,24 @@
+import numpy as np
 import json
 import os
-import numpy as np
 
 def get_shot_type(x, y):
-    """Calcola se il tiro è da 2, 3 o un libero"""
-    y_rel = y % 845
-    dist = np.sqrt(x**2 + y_rel**2)
+    # Distanza dal canestro posizionato in (0,0)
+    dist = np.sqrt(x**2 + y**2)
     
-    # Area Tiro Libero
-    if 138 <= y_rel <= 148 and abs(x) <= 15: 
-        return "FT"
-    
-    # Tiro da 3 (Arco o Angoli)
-    if dist >= 237.5 or (abs(x) > 220 and y_rel < 92.5): 
+    # Regola FIBA/NBA: 
+    # 237.5 è il raggio dell'arco
+    # abs(x) > 220 e y < 92.5 gestisce le tacche dritte negli angoli
+    if dist >= 237.5 or (abs(x) > 220 and y < 92.5):
         return "3PT"
-    
     return "2PT"
 
-def save_shots(shots, filename="sessione_tiri.json"):
-    """Salva la lista di tiri in un file JSON"""
-    with open(filename, 'w') as f:
-        json.dump(shots, f, indent=4)
+def save_shots(shots):
+    with open("sessione_tiri.json", "w") as f:
+        json.dump(shots, f)
 
-def load_shots(filename="sessione_tiri.json"):
-    """Carica i tiri salvati se il file esiste"""
-    if os.path.exists(filename):
-        try:
-            with open(filename, 'r') as f:
-                return json.load(f)
-        except:
-            return []
+def load_shots():
+    if os.path.exists("sessione_tiri.json"):
+        with open("sessione_tiri.json", "r") as f:
+            return json.load(f)
     return []
