@@ -130,7 +130,6 @@ if st.session_state.shots:
         )
     )
     return fig
-
 # --- INTERFACCIA UTENTE ---
 p_name = st.text_input("Giocatore", "PLAYER 1").upper()
 esito = st.radio("Esito", ["Fatto", "Errore"], horizontal=True)
