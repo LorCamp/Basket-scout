@@ -45,16 +45,31 @@ col1, col2 = st.columns([2,1])
 with col1: p_name = st.text_input("Giocatore", "PLAYER 1").upper()
 with col2: esito = st.radio("Esito", ["Fatto", "Errore"], horizontal=True)
 
-# --- TOUCH LOGIC ---
-event = st.plotly_chart(create_court(), width='stretch', on_select="rerun")
+# --- TOUCH LOGIC AGGIORNATA ---
+# Usa 'on_select' per forzare il rinfresco dei dati
+event = st.plotly_chart(
+    create_court(), 
+    width='stretch', 
+    on_select="rerun",  # Fondamentale: dice a Streamlit di ricaricare al clic
+    key="basket_chart"  # Una chiave univoca aiuta a mantenere lo stato
+)
 
-if event and event.get("selection") and event["selection"]["points"]:
+# Verifica se è stato cliccato un punto
+if event and "selection" in event and event["selection"]["points"]:
+    # Estraiamo le coordinate del punto cliccato
     pt = event["selection"]["points"][0]
+    
     new_shot = {
-        "player": p_name, "x": pt["x"], "y": pt["y"],
+        "player": p_name, 
+        "x": pt["x"], 
+        "y": pt["y"],
         "made": True if esito == "Fatto" else False,
         "type": get_shot_type(pt["x"], pt["y"])
     }
+    
+    # Aggiungiamo il tiro e salviamo
     st.session_state.shots.append(new_shot)
     save_shots(st.session_state.shots)
+    
+    # Reset della selezione per evitare loop infiniti
     st.rerun()
