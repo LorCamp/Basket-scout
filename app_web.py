@@ -4,114 +4,82 @@ import pandas as pd
 import numpy as np
 from engine import get_shot_type, save_shots, load_shots
 
-# 1. Configurazione Iniziale
-st.set_page_config(page_title="Basket Scout Live", layout="centered")
+st.set_page_config(page_title="Basket Scout PRO", layout="centered")
 
 if 'shots' not in st.session_state:
     st.session_state.shots = load_shots()
 
-st.title("🏀 Basket Scout Live")
+st.title("🏀 Basket Scout PRO")
 
-# 2. Funzione per Disegnare il Campo
-def create_court():
+# --- 1. INPUT GIOCATORE ED ESITO ---
+col_name, col_res = st.columns([2, 1])
+with col_name:
+    p_name = st.text_input("Giocatore:", "PLAYER 1").upper()
+with col_res:
+    esito = st.radio("Esito:", ["Fatto", "Errore"], horizontal=True)
+
+# --- 2. CONTROLLI DI POSIZIONE ---
+st.write("### 🎯 Posiziona il tiro")
+pos_x = st.slider("Sinistra <-> Destra", -250, 250, 0, step=5)
+pos_y = st.slider("Distanza dal fondo", -50, 420, 100, step=5)
+
+# --- 3. FUNZIONE DISEGNO CAMPO ---
+def create_court_hybrid(px, py):
     fig = go.Figure()
-    
-    # Linee perimetrali e metà campo
+    # Linee campo base
     fig.add_shape(type="rect", x0=-250, y0=-47.5, x1=250, y1=422.5, line=dict(color="white", width=2))
     fig.add_shape(type="line", x0=-220, y0=-47.5, x1=-220, y1=92.5, line_color="white")
     fig.add_shape(type="line", x0=220, y0=-47.5, x1=220, y1=92.5, line_color="white")
-    
-    # Arco 3 Punti FIBA
     t = np.linspace(np.arcsin(92.5/237.5), np.pi - np.arcsin(92.5/237.5), 60)
-    fig.add_trace(go.Scatter(x=237.5*np.cos(t), y=237.5*np.sin(t), mode='lines', 
-                              line=dict(color='white', width=2), hoverinfo='skip'))
-    
-    # Canestro e Tabellone
-    fig.add_shape(type="line", x0=-30, y0=-7.5, x1=30, y1=-7.5, line_color="white")
+    fig.add_trace(go.Scatter(x=237.5*np.cos(t), y=237.5*np.sin(t), mode='lines', line_color='white', hoverinfo='skip'))
     fig.add_shape(type="circle", x0=-7.5, y0=-7.5, x1=7.5, y1=7.5, line_color="orange")
 
-    # Disegno tiri registrati
+    # MIRINO GIALLO
+    fig.add_trace(go.Scatter(x=[px], y=[py], mode='markers', 
+                  marker=dict(color='yellow', size=18, symbol='star'), name="Mirino"))
+
+    # Tiri storici
     if st.session_state.shots:
         df = pd.DataFrame(st.session_state.shots)
         for is_made, color, symbol in [(True, "#2ecc71", "circle"), (False, "#e74c3c", "x")]:
             mask = df[df['made'] == is_made]
             if not mask.empty:
                 fig.add_trace(go.Scatter(x=mask['x'], y=mask['y'], mode='markers',
-                              marker=dict(color=color, size=14, symbol=symbol), showlegend=False))
+                              marker=dict(color=color, size=12, symbol=symbol), showlegend=False))
 
-    fig.update_layout(
-        width=420, height=480, template="plotly_dark",
-        xaxis=dict(range=[-260, 260], visible=False, fixedrange=True),
-        yaxis=dict(range=[-60, 450], visible=False, fixedrange=True),
-        yaxis_scaleanchor="x",
-        margin=dict(l=10, r=10, t=10, b=10),
-        clickmode='event+select',
-        dragmode=False,
-        showlegend=False,
-        modebar=dict(
-            remove=["zoom", "pan", "select", "lasso2d", "zoomIn", "zoomOut", "autoScale", "resetScale"],
-            orientation='h', bgcolor='rgba(0,0,0,0)'
-        )
-    )
-    return fig  # <--- ORA È DENTRO LA FUNZIONE!
+    fig.update_layout(width=420, height=480, template="plotly_dark",
+                      xaxis=dict(range=[-260, 260], visible=False, fixedrange=True),
+                      yaxis=dict(range=[-60, 450], visible=False, fixedrange=True),
+                      yaxis_scaleanchor="x", margin=dict(l=10, r=10, t=10, b=10),
+                      dragmode=False, showlegend=False)
+    return fig
 
-# 3. Interfaccia Utente
-col1, col2 = st.columns([2, 1])
-with col1:
-    p_name = st.text_input("Giocatore:", "PLAYER 1").upper()
-with col2:
-    esito = st.radio("Esito:", ["Fatto", "Errore"], horizontal=True)
+# Mostriamo il grafico con la nuova proprietà width
+st.plotly_chart(create_court_hybrid(pos_x, pos_y), width='stretch', config={'staticPlot': True})
 
-# --- 4. Visualizzazione Grafico ---
-# Usiamo un contenitore per assicurarci che il tocco non venga "rubato" dallo scorrimento della pagina
-with st.container():
-    event = st.plotly_chart(
-        create_court(), 
-        use_container_width=True, # Prova a usare questo invece di stretch
-        on_select="rerun", 
-        key="basket_chart",
-        config={
-            'displayModeBar': False, # Nascondiamo la barra per evitare tocchi accidentali
-            'scrollZoom': False,
-            'staticPlot': False,
-            'doubleClick': 'reset',
-            'displaylogo': False
-        }
-    )
+# --- 4. TASTO REGISTRAZIONE ---
+if st.button("✅ REGISTRA TIRO", width='stretch', type="primary"):
+    shot_type = get_shot_type(pos_x, pos_y)
+    new_shot = {
+        "player": p_name, "x": pos_x, "y": pos_y,
+        "made": True if esito == "Fatto" else False,
+        "type": shot_type
+    }
+    st.session_state.shots.append(new_shot)
+    save_shots(st.session_state.shots)
+    st.success(f"Tiro da {shot_type} registrato!")
+    st.rerun()
 
-# --- 5. Logica di Salvataggio (Più permissiva) ---
-if event and "selection" in event:
-    points = event["selection"].get("points", [])
-    
-    if len(points) > 0:
-        pt = points[0]
-        # Algoritmo di estrazione coordinate più robusto
-        pos_x = pt.get("x")
-        pos_y = pt.get("y")
-        
-        if pos_x is not None and pos_y is not None:
-            # Creiamo il record
-            new_shot = {
-                "player": p_name, 
-                "x": float(pos_x), 
-                "y": float(pos_y),
-                "made": True if esito == "Fatto" else False,
-                "type": get_shot_type(pos_x, pos_y)
-            }
-            
-            # Evitiamo di salvare lo stesso identico tocco due volte
-            if not st.session_state.shots or st.session_state.shots[-1] != new_shot:
-                st.session_state.shots.append(new_shot)
-                save_shots(st.session_state.shots)
-                st.rerun()
-
-# 6. Azioni e Tabella
+# --- 5. AZIONI ---
 if st.session_state.shots:
     st.divider()
-    if st.button("⬅️ Elimina Ultimo Tiro", width='stretch'):
-        st.session_state.shots.pop()
-        save_shots(st.session_state.shots)
-        st.rerun()
-    
-    st.write("### Ultimi Tiri")
-    st.dataframe(pd.DataFrame(st.session_state.shots).tail(5))
+    col_del, col_rep = st.columns(2)
+    with col_del:
+        if st.button("⬅️ Elimina Ultimo", width='stretch'):
+            st.session_state.shots.pop()
+            save_shots(st.session_state.shots)
+            st.rerun()
+    with col_rep:
+        df_log = pd.DataFrame(st.session_state.shots)
+        csv = df_log.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Scarica CSV", data=csv, file_name="scout_basket.csv", width='stretch')
