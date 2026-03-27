@@ -25,7 +25,7 @@ col_name, col_time = st.columns([2, 1])
 with col_name:
     p_name = st.text_input("Giocatore:", "PLAYER 1").upper()
 with col_time:
-    p_time_input = st.text_input("Tempo (min/quarto):", "00:00")
+    p_time_input = st.text_input("Tempo Tot:", "00")
 
 esito_tipo = st.radio("Esito:", 
                       ["Canestro (Campo)", "Errore (Campo)", "TL Segnato", "TL Sbagliato"], 
