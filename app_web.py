@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import os
 from engine import get_shot_type, save_shots, load_shots, load_roster, save_player_to_roster
+from reports import generate_player_report
 
 # --- CONFIGURAZIONE ---
 st.set_page_config(page_title="Basket Scout PRO", layout="centered")
@@ -156,9 +157,23 @@ if st.session_state.shots:
             t_cols[i].metric(t, f"{m}/{tot}", f"{perc:.1f}%")
 
     # 3. Download e Delete
-    c_del, c_csv = st.columns(2)
+        # ... (codice precedente delle statistiche) ...
+    
+    c_del, c_csv, c_pdf = st.columns(3) # Aggiungiamo una terza colonna
+    
     if c_del.button("⬅️ Elimina Ultimo", use_container_width=True):
         st.session_state.shots.pop()
         save_shots(st.session_state.shots)
         st.rerun()
-    c_csv.download_button("📥 Scarica Report Completo", df.to_csv(index=False).encode('utf-8'), f"scout_{p_team}.csv", use_container_width=True)
+        
+    c_csv.download_button("📥 CSV", df.to_csv(index=False).encode('utf-8'), f"scout_{p_team}.csv", use_container_width=True)
+    
+    # TASTO PDF
+    pdf_data = generate_player_report(df, p_team)
+    c_pdf.download_button(
+        label="📄 Scarica PDF",
+        data=pdf_data,
+        file_name=f"Report_{p_team}.pdf",
+        mime="application/pdf",
+        use_container_width=True
+    )
