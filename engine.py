@@ -3,6 +3,10 @@ import json
 import os
 import pandas as pd
 
+if os.path.exists("roster.csv"):
+    os.remove("roster.csv") # Questo elimina il file corrotto all'avvio
+
+
 def get_shot_type(x, y):
     dist = np.sqrt(x**2 + y**2)
     if dist >= 237.5 or (abs(x) > 220 and y < 92.5):
