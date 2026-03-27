@@ -3,12 +3,8 @@ import json
 import os
 
 def get_shot_type(x, y):
-    # Distanza dal canestro posizionato in (0,0)
     dist = np.sqrt(x**2 + y**2)
-    
-    # Regola FIBA/NBA: 
-    # 237.5 è il raggio dell'arco
-    # abs(x) > 220 e y < 92.5 gestisce le tacche dritte negli angoli
+    # Regola FIBA: Arco a 6.75m (circa 237.5 unità) e corner a 6.60m
     if dist >= 237.5 or (abs(x) > 220 and y < 92.5):
         return "3PT"
     return "2PT"
