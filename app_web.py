@@ -47,7 +47,7 @@ df_roster = load_roster()
 # --- MAIN APP ---
 st.title("🏀 Basket Scout PRO")
 
-# --- SELEZIONE SQUADRA (FILTRO) ---
+# --- SELEZIONE SQUADRA ---
 st.write("### 🏟️ Selezione Team")
 col_session, col_team_sel = st.columns(2)
 
@@ -55,7 +55,6 @@ with col_session:
     tipo_sessione = st.selectbox("Sessione:", ["Allenamento", "Partita"])
 
 with col_team_sel:
-    # Creiamo la lista delle squadre uniche dal roster
     if not df_roster.empty and 'squadra' in df_roster.columns:
         lista_squadre = sorted(df_roster['squadra'].unique().tolist())
         lista_squadre.append("+ AGGIUNGI NUOVA...")
@@ -74,7 +73,6 @@ st.divider()
 col_name, col_time = st.columns([2, 1])
 with col_name:
     if not df_roster.empty and 'squadra' in df_roster.columns:
-        # Filtriamo i giocatori in base alla squadra scelta sopra
         giocatori_squadra = df_roster[df_roster['squadra'] == p_team]['nome'].tolist()
         if giocatori_squadra:
             p_name = st.selectbox("Tiratore:", giocatori_squadra)
@@ -95,16 +93,13 @@ pos_x, pos_y = (0, 142) if is_tl else (st.slider("X", -250, 250, 0), st.slider("
 # --- DISEGNO CAMPO ---
 def create_court_final(px, py):
     fig = go.Figure()
-    # Campo base
     fig.add_shape(type="rect", x0=-250, y0=-47.5, x1=250, y1=422.5, line_color="white", line_width=2)
     fig.add_shape(type="rect", x0=-80, y0=-47.5, x1=80, y1=142.5, line_color="white", line_width=2)
-    # 3PT FIBA
     fig.add_shape(type="line", x0=-220, y0=-47.5, x1=-220, y1=92.5, line_color="white", line_width=2)
     fig.add_shape(type="line", x0=220, y0=-47.5, x1=220, y1=92.5, line_color="white", line_width=2)
     ang = np.arcsin(92.5/237.5)
     t_a = np.linspace(ang, np.pi - ang, 60)
     fig.add_trace(go.Scatter(x=237.5*np.cos(t_a), y=237.5*np.sin(t_a), mode='lines', line_color='white', showlegend=False))
-    # Mirino
     fig.add_trace(go.Scatter(x=[px], y=[py], mode='markers', marker=dict(color='yellow', size=18, symbol='star'), showlegend=False))
     
     if st.session_state.shots:
@@ -136,19 +131,34 @@ if st.button("✅ REGISTRA TIRO", use_container_width=True, type="primary"):
 if st.session_state.shots:
     df = pd.DataFrame(st.session_state.shots)
     st.divider()
+    
+    # 1. Statistiche GIOCATORE Selezionato
+    df_player = df[(df['team'] == p_team) & (df['player'] == p_name)]
+    if not df_player.empty:
+        st.subheader(f"👤 Individuale: {p_name}")
+        p_cols = st.columns(3)
+        for i, t in enumerate(["2PT", "3PT", "TL"]):
+            sub = df_player[df_player['type'] == t]
+            m, tot = len(sub[sub['made'] == True]), len(sub)
+            perc = (m/tot*100) if tot > 0 else 0
+            p_cols[i].metric(t, f"{m}/{tot}", f"{perc:.1f}%")
+        st.divider()
+
+    # 2. Statistiche SQUADRA
     df_t = df[df['team'] == p_team]
     if not df_t.empty:
-        st.write(f"### Recap Squadra: {p_team}")
-        cols = st.columns(3)
+        st.subheader(f"📊 Team: {p_team}")
+        t_cols = st.columns(3)
         for i, t in enumerate(["2PT", "3PT", "TL"]):
             sub = df_t[df_t['type'] == t]
             m, tot = len(sub[sub['made'] == True]), len(sub)
-            p = (m/tot*100) if tot > 0 else 0
-            cols[i].metric(t, f"{m}/{tot}", f"{p:.1f}%")
+            perc = (m/tot*100) if tot > 0 else 0
+            t_cols[i].metric(t, f"{m}/{tot}", f"{perc:.1f}%")
 
+    # 3. Download e Delete
     c_del, c_csv = st.columns(2)
     if c_del.button("⬅️ Elimina Ultimo", use_container_width=True):
         st.session_state.shots.pop()
         save_shots(st.session_state.shots)
         st.rerun()
-    c_csv.download_button("📥 Scarica CSV", df.to_csv(index=False).encode('utf-8'), "scout_basket.csv", use_container_width=True)
+    c_csv.download_button("📥 Scarica Report Completo", df.to_csv(index=False).encode('utf-8'), f"scout_{p_team}.csv", use_container_width=True)
