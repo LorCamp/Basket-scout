@@ -12,86 +12,92 @@ st.set_page_config(page_title="Basket Scout PRO", layout="centered")
 if 'shots' not in st.session_state:
     st.session_state.shots = load_shots()
 
-# --- SIDEBAR: PANNELLO DI CONTROLLO ---
-st.sidebar.title("⚙️ Impostazioni")
+# --- SIDEBAR: GESTIONE ROSTER E APP ---
+st.sidebar.title("⚙️ Pannello Controllo")
 
-# 1. Reset Tiri
 if st.sidebar.button("🚨 NUOVA PARTITA (Reset Tiri)", use_container_width=True):
     st.session_state.shots = []
     save_shots([])
     st.rerun()
 
 st.sidebar.divider()
-
-# 2. Gestione Roster
-st.sidebar.subheader("👥 Aggiungi al Roster")
+st.sidebar.subheader("👥 Gestione Roster")
 r_name = st.sidebar.text_input("Nome Giocatore:").upper()
-r_team_new = st.sidebar.text_input("Nome Squadra:").upper()
+r_team_new = st.sidebar.text_input("Squadra Giocatore:").upper()
 
-if st.sidebar.button("Salva Giocatore", use_container_width=True, type="primary"):
+if st.sidebar.button("➕ Salva nel Roster", use_container_width=True, type="primary"):
     if r_name and r_team_new:
         save_player_to_roster(r_name, r_team_new)
-        st.sidebar.success(f"Aggiunto: {r_name} ({r_team_new})")
+        st.sidebar.success(f"Aggiunto: {r_name}")
         st.rerun()
 
 st.sidebar.divider()
+st.sidebar.subheader("💾 Backup & Ripristino")
 
-# 3. Reset Roster
-if st.sidebar.button("🗑️ CANCELLA TUTTO IL ROSTER", use_container_width=True):
+# Caricamento roster esistente per il download
+df_roster = load_roster()
+
+if not df_roster.empty:
+    st.sidebar.download_button(
+        label="📥 Scarica Roster sul Telefono",
+        data=df_roster.to_csv(index=False).encode('utf-8'),
+        file_name="mio_roster_basket.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
+
+# Upload Roster dal telefono
+uploaded_roster = st.sidebar.file_uploader("📂 Carica Roster da File", type=["csv"])
+if uploaded_roster is not None:
+    try:
+        new_df = pd.read_csv(uploaded_roster)
+        if 'nome' in new_df.columns and 'squadra' in new_df.columns:
+            new_df.to_csv("roster.csv", index=False)
+            st.sidebar.success("Roster caricato! Riavvio...")
+            st.rerun()
+    except:
+        st.sidebar.error("File non valido.")
+
+if st.sidebar.button("🗑️ SVUOTA TUTTO IL ROSTER", use_container_width=True):
     if os.path.exists("roster.csv"):
         os.remove("roster.csv")
         st.rerun()
 
-# Caricamento roster
-df_roster = load_roster()
-
 # --- MAIN APP ---
 st.title("🏀 Basket Scout PRO")
 
-# --- SELEZIONE SQUADRA ---
-st.write("### 🏟️ Selezione Team")
-col_session, col_team_sel = st.columns(2)
-
-with col_session:
-    tipo_sessione = st.selectbox("Sessione:", ["Allenamento", "Partita"])
+# Selezione Team e Sessione
+col_sess, col_team_sel = st.columns(2)
+tipo_sessione = col_sess.selectbox("Sessione:", ["Allenamento", "Partita"])
 
 with col_team_sel:
     if not df_roster.empty and 'squadra' in df_roster.columns:
         lista_squadre = sorted(df_roster['squadra'].unique().tolist())
         lista_squadre.append("+ AGGIUNGI NUOVA...")
         scelta_squadra = st.selectbox("Seleziona Squadra:", lista_squadre)
-        
-        if scelta_squadra == "+ AGGIUNGI NUOVA...":
-            p_team = st.text_input("Scrivi nome squadra:").upper()
-        else:
-            p_team = scelta_squadra
+        p_team = st.text_input("Nome Squadra:").upper() if scelta_squadra == "+ AGGIUNGI NUOVA..." else scelta_squadra
     else:
-        p_team = st.text_input("Squadra (Roster vuoto):", "MIA SQUADRA").upper()
+        p_team = st.text_input("Squadra:", "MIA SQUADRA").upper()
 
 st.divider()
 
-# --- SELEZIONE GIOCATORE ---
+# Selezione Giocatore Filtrata
 col_name, col_time = st.columns([2, 1])
 with col_name:
     if not df_roster.empty and 'squadra' in df_roster.columns:
         giocatori_squadra = df_roster[df_roster['squadra'] == p_team]['nome'].tolist()
-        if giocatori_squadra:
-            p_name = st.selectbox("Tiratore:", giocatori_squadra)
-        else:
-            p_name = st.text_input("Giocatore (non in roster):").upper()
+        p_name = st.selectbox("Tiratore:", giocatori_squadra) if giocatori_squadra else st.text_input("Giocatore (manuale):").upper()
     else:
         p_name = st.text_input("Giocatore (manuale):").upper()
-
-with col_time:
-    p_time = st.text_input("Tempo:", "00:00")
+p_time = col_time.text_input("Tempo:", "00:00")
 
 esito_tipo = st.radio("Esito:", ["Canestro (Campo)", "Errore (Campo)", "TL Segnato", "TL Sbagliato"], horizontal=True)
 
-# Posizionamento
+# Logica Posizione
 is_tl = "TL" in esito_tipo
 pos_x, pos_y = (0, 142) if is_tl else (st.slider("X", -250, 250, 0), st.slider("Y", -50, 420, 100))
 
-# --- DISEGNO CAMPO ---
+# Disegno Campo
 def create_court_final(px, py):
     fig = go.Figure()
     fig.add_shape(type="rect", x0=-250, y0=-47.5, x1=250, y1=422.5, line_color="white", line_width=2)
@@ -115,68 +121,49 @@ def create_court_final(px, py):
 
 st.plotly_chart(create_court_final(pos_x, pos_y), width='stretch', config={'staticPlot': True})
 
-# --- REGISTRAZIONE ---
 if st.button("✅ REGISTRA TIRO", use_container_width=True, type="primary"):
     s_type = "TL" if is_tl else get_shot_type(pos_x, pos_y)
     made = "Canestro" in esito_tipo or "Segnato" in esito_tipo
     pts = 1 if is_tl else (int(s_type[0]) if made else 0)
-    
-    st.session_state.shots.append({
-        "sessione": tipo_sessione, "team": p_team, "player": p_name, "tempo": p_time,
-        "x": pos_x, "y": pos_y, "made": made, "type": s_type, "punti": pts
-    })
+    st.session_state.shots.append({"sessione": tipo_sessione, "team": p_team, "player": p_name, "tempo": p_time, "x": pos_x, "y": pos_y, "made": made, "type": s_type, "punti": pts})
     save_shots(st.session_state.shots)
     st.rerun()
 
-# --- STATISTICHE ---
+# --- STATISTICHE E DOWNLOAD ---
 if st.session_state.shots:
     df = pd.DataFrame(st.session_state.shots)
     st.divider()
     
-    # 1. Statistiche GIOCATORE Selezionato
-    df_player = df[(df['team'] == p_team) & (df['player'] == p_name)]
-    if not df_player.empty:
+    # Statistiche Individuali
+    df_p = df[(df['team'] == p_team) & (df['player'] == p_name)]
+    if not df_p.empty:
         st.subheader(f"👤 Individuale: {p_name}")
-        p_cols = st.columns(3)
+        c = st.columns(3)
         for i, t in enumerate(["2PT", "3PT", "TL"]):
-            sub = df_player[df_player['type'] == t]
-            m, tot = len(sub[sub['made'] == True]), len(sub)
-            perc = (m/tot*100) if tot > 0 else 0
-            p_cols[i].metric(t, f"{m}/{tot}", f"{perc:.1f}%")
+            sub = df_p[df_p['type'] == t]
+            m, tot = len(sub[sub['made']==True]), len(sub)
+            c[i].metric(t, f"{m}/{tot}", f"{(m/tot*100) if tot>0 else 0:.1f}%")
         st.divider()
 
-    # 2. Statistiche SQUADRA (Filtra per la squadra selezionata nella tendina)
+    # Statistiche Team
     df_t = df[df['team'] == p_team]
     if not df_t.empty:
-        st.subheader(f"📊 Analisi Team: {p_team}")
-        t_cols = st.columns(3)
+        st.subheader(f"📊 Team: {p_team}")
+        c = st.columns(3)
         for i, t in enumerate(["2PT", "3PT", "TL"]):
             sub = df_t[df_t['type'] == t]
-            m, tot = len(sub[sub['made'] == True]), len(sub)
-            perc = (m/tot*100) if tot > 0 else 0
-            t_cols[i].metric(t, f"{m}/{tot}", f"{perc:.1f}%")
+            m, tot = len(sub[sub['made']==True]), len(sub)
+            c[i].metric(t, f"{m}/{tot}", f"{(m/tot*100) if tot>0 else 0:.1f}%")
 
     st.divider()
-    
-    # 3. Pulsanti Report
     c_del, c_csv, c_pdf = st.columns(3)
-    
     if c_del.button("⬅️ Elimina Ultimo", use_container_width=True):
         st.session_state.shots.pop()
         save_shots(st.session_state.shots)
         st.rerun()
-        
-    c_csv.download_button("📥 Scarica CSV", df.to_csv(index=False).encode('utf-8'), "dati_completi.csv", use_container_width=True)
-    
-    # Generazione PDF (passiamo p_team come squadra di riferimento)
+    c_csv.download_button("📥 CSV", df.to_csv(index=False).encode('utf-8'), "scout.csv", use_container_width=True)
     try:
-        pdf_data = generate_player_report(df, p_team)
-        c_pdf.download_button(
-            label="📄 Report PDF",
-            data=pdf_data,
-            file_name=f"Report_Match_{p_team}.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
-    except Exception as e:
+        pdf_bytes = generate_player_report(df, p_team)
+        c_pdf.download_button("📄 PDF", pdf_bytes, f"Report_{p_team}.pdf", "application/pdf", use_container_width=True)
+    except:
         c_pdf.error("Errore PDF")
