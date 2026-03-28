@@ -6,6 +6,42 @@ import os
 from engine import get_shot_type, save_shots, load_shots, load_roster, save_player_to_roster
 from reports import generate_player_report
 
+# --- FUNZIONE ACCESSO ---
+def check_password():
+    """Restituisce True se l'utente ha inserito la password corretta."""
+
+    def password_entered():
+        """Controlla se la password inserita è corretta."""
+        if st.session_state["password"] == "ErFaLo142127": # <--- CAMBIA QUI LA TUA PASSWORD
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # Rimuove la password dalla sessione per sicurezza
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        # Visualizza l'input per la password
+        st.title("🔐 Accesso Riservato")
+        st.text_input(
+            "Inserisci la password per gestire lo Scout:", 
+            type="password", 
+            on_change=password_entered, 
+            key="password"
+        )
+        if "password_correct" in st.session_state:
+            st.error("😕 Password errata")
+        return False
+    else:
+        return st.session_state["password_correct"]
+
+# --- CONTROLLO ACCESSO ---
+if not check_password():
+    st.stop()  # Ferma l'esecuzione qui finché la password non è corretta
+
+# --- DA QUI IN POI PARTE IL RESTO DEL TUO CODICE (Configurazione, Sidebar, ecc.) ---
+st.set_page_config(page_title="Basket Scout PRO", layout="centered")
+# ... tutto il resto del codice che abbiamo scritto finora ...
+
+
 # --- CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="Basket Scout PRO", layout="centered")
 
