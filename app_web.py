@@ -145,10 +145,10 @@ if st.session_state.shots:
             p_cols[i].metric(t, f"{m}/{tot}", f"{perc:.1f}%")
         st.divider()
 
-    # 2. Statistiche SQUADRA
+    # 2. Statistiche SQUADRA (Filtra per la squadra selezionata nella tendina)
     df_t = df[df['team'] == p_team]
     if not df_t.empty:
-        st.subheader(f"📊 Team: {p_team}")
+        st.subheader(f"📊 Analisi Team: {p_team}")
         t_cols = st.columns(3)
         for i, t in enumerate(["2PT", "3PT", "TL"]):
             sub = df_t[df_t['type'] == t]
@@ -156,24 +156,27 @@ if st.session_state.shots:
             perc = (m/tot*100) if tot > 0 else 0
             t_cols[i].metric(t, f"{m}/{tot}", f"{perc:.1f}%")
 
-    # 3. Download e Delete
-        # ... (codice precedente delle statistiche) ...
+    st.divider()
     
-    c_del, c_csv, c_pdf = st.columns(3) # Aggiungiamo una terza colonna
+    # 3. Pulsanti Report
+    c_del, c_csv, c_pdf = st.columns(3)
     
     if c_del.button("⬅️ Elimina Ultimo", use_container_width=True):
         st.session_state.shots.pop()
         save_shots(st.session_state.shots)
         st.rerun()
         
-    c_csv.download_button("📥 CSV", df.to_csv(index=False).encode('utf-8'), f"scout_{p_team}.csv", use_container_width=True)
+    c_csv.download_button("📥 Scarica CSV", df.to_csv(index=False).encode('utf-8'), "dati_completi.csv", use_container_width=True)
     
-    # TASTO PDF
-    pdf_data = generate_player_report(df, p_team)
-    c_pdf.download_button(
-        label="📄 Scarica PDF",
-        data=pdf_data,
-        file_name=f"Report_{p_team}.pdf",
-        mime="application/pdf",
-        use_container_width=True
-    )
+    # Generazione PDF (passiamo p_team come squadra di riferimento)
+    try:
+        pdf_data = generate_player_report(df, p_team)
+        c_pdf.download_button(
+            label="📄 Report PDF",
+            data=pdf_data,
+            file_name=f"Report_Match_{p_team}.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
+    except Exception as e:
+        c_pdf.error("Errore PDF")
