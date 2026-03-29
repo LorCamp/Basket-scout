@@ -115,16 +115,26 @@ else:
 st.write("📍 **Tocca il punto del tiro sul campo:**")
 fig_court = create_basketball_court(current_x, current_y, st.session_state.shots)
 
-# Per i grafici, usiamo width=None per permettere al CSS di gestire la responsività o una larghezza fissa
-event = st.plotly_chart(fig_court, on_select="rerun", config={'displayModeBar': False})
+# IMPORTANTE: use_container_width=True è necessario per mappare le coordinate X/Y 
+# correttamente su schermi diversi (smartphone vs pc). 
+# Se vuoi evitare il warning futuro, la versione 1.35+ di Streamlit usa ancora questo.
+event = st.plotly_chart(
+    fig_court, 
+    use_container_width=True, 
+    on_select="rerun", 
+    config={'displayModeBar': False, 'staticPlot': False}
+)
 
 # Se l'utente tocca il campo, aggiorniamo la stella gialla
-if event and "selection" in event and event["selection"]["points"]:
+if event and "selection" in event and "points" in event["selection"] and len(event["selection"]["points"]) > 0:
+    # Recuperiamo le coordinate dal punto toccato
+    point = event["selection"]["points"][0]
     st.session_state.last_touch = {
-        "x": event["selection"]["points"][0]["x"],
-        "y": event["selection"]["points"][0]["y"]
+        "x": point["x"],
+        "y": point["y"]
     }
     st.rerun()
+
 
 # --- BOTTONE REGISTRAZIONE ---
 if st.button("✅ REGISTRA AZIONE", type="primary", key="reg_azione"):
