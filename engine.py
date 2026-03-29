@@ -31,14 +31,15 @@ def load_shots(user_id):
     """Carica i tiri dell'utente specifico."""
     path = f"{get_user_folder(user_id)}/shots.csv"
     if os.path.exists(path):
-        # Converte il CSV in lista di dizionari per Streamlit
-        return pd.read_csv(path).to_dict('records')
+        try:
+            return pd.read_csv(path).to_dict('records')
+        except Exception:
+            return []
     return []
 
 def get_shot_type(x, y):
-    """Determina se il tiro è da 2 o 3 punti basandosi sulle coordinate."""
+    """Determina se il tiro è da 2 o 3 punti."""
     dist = (x**2 + y**2)**0.5
-    # Logica semplificata arco 3 punti FIBA
     if y < 92.5 and abs(x) > 220: 
         return "3PT"
     return "3PT" if dist > 237.5 else "2PT"
