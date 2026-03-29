@@ -8,6 +8,7 @@ from court_graphics import create_basketball_court
 
 st.set_page_config(page_title="Scout Basket PRO", layout="wide")
 
+# 1. AUTENTICAZIONE
 if not check_password():
     st.stop()
 
@@ -22,7 +23,23 @@ if st.sidebar.button("Logout"):
     st.session_state.clear()
     st.rerun()
 
-with st.sidebar.expander("➕ Aggiungi Giocatore"):
+st.sidebar.divider()
+
+# FUNZIONE: CARICAMENTO ROSTER DA FILE
+st.sidebar.subheader("📂 Importa Roster")
+up_file = st.sidebar.file_uploader("Carica file .csv (colonne: nome, squadra)", type=["csv"])
+if up_file:
+    df_up = pd.read_csv(up_file)
+    # Assicuriamoci che le colonne siano minuscole per coerenza
+    df_up.columns = [c.lower() for c in df_up.columns]
+    path_r = f"data_users/{user_id}/roster.csv"
+    os.makedirs(os.path.dirname(path_r), exist_ok=True)
+    df_up.to_csv(path_r, index=False)
+    st.sidebar.success("Roster caricato con successo!")
+    st.rerun()
+
+# FUNZIONE: AGGIUNTA MANUALE
+with st.sidebar.expander("➕ Aggiungi Giocatore Manuale"):
     teams_db = sorted(df_roster['squadra'].unique().tolist()) if not df_roster.empty else []
     sq_in = st.selectbox("Squadra:", teams_db + ["+ NUOVA..."])
     final_sq = st.text_input("Nome Squadra:").upper() if sq_in == "+ NUOVA..." else sq_in
@@ -32,7 +49,9 @@ with st.sidebar.expander("➕ Aggiungi Giocatore"):
             save_player_to_roster(user_id, new_n, final_sq)
             st.rerun()
 
-if st.sidebar.button("🚨 Reset Sessione"):
+st.sidebar.divider()
+
+if st.sidebar.button("🚨 Reset Tiri Sessione"):
     st.session_state.shots = []
     save_shots(user_id, [])
     st.rerun()
@@ -46,19 +65,19 @@ t_home = c_top2.selectbox("Squadra Attiva:", teams_list) if teams_list else c_to
 
 st.divider()
 
-# Input
+# Selezione Giocatore ed Esito
 col_p, col_m, col_e = st.columns([1.5, 1, 2.5])
 giocatori = df_roster[df_roster['squadra'] == t_home]['nome'].tolist() if not df_roster.empty else []
 p_name = col_p.selectbox("Giocatore:", sorted(giocatori)) if giocatori else col_p.text_input("Nome:", "PLAYER")
 p_time = col_m.text_input("Min:", "00:00")
 esito = col_e.radio("Esito:", ["Segnato", "Errore", "TL Segnato", "TL Sbagliato"], horizontal=True)
 
-# Grafico
+# Grafico del campo
 is_tl = "TL" in esito
 cur_x, cur_y = (0, 142) if is_tl else (st.slider("X", -250, 250, 0, 10), st.slider("Y", -40, 420, 100, 10))
 st.plotly_chart(create_basketball_court(cur_x, cur_y, st.session_state.shots), use_container_width=True)
 
-# Pulsanti Registra/Undo
+# Pulsanti di azione
 b1, b2 = st.columns([4, 1])
 if b1.button("✅ REGISTRA TIRO", type="primary", use_container_width=True):
     s_type = "TL" if is_tl else get_shot_type(cur_x, cur_y)
@@ -67,7 +86,8 @@ if b1.button("✅ REGISTRA TIRO", type="primary", use_container_width=True):
     st.session_state.shots.append({"team": t_home, "player": p_name, "tempo": p_time, "x": cur_x, "y": cur_y, "made": made, "type": s_type, "punti": pts})
     save_shots(user_id, st.session_state.shots)
     st.rerun()
-if b2.button("↩️"):
+
+if b2.button("↩️", help="Elimina ultimo tiro"):
     if st.session_state.shots:
         st.session_state.shots.pop()
         delete_last_shot(user_id)
@@ -80,9 +100,9 @@ if st.session_state.shots:
     
     if not df_t.empty:
         st.divider()
-        st.header(f"📊 Report Squadra: {t_home}")
+        st.header(f"📊 Report {t_home}")
         
-        # 1. TOTALI SQUADRA (La parte mancante)
+        # 1. METRICHE SQUADRA
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("PUNTI TOTALI", df_t['punti'].sum())
         
@@ -98,7 +118,7 @@ if st.session_state.shots:
         c4.metric("Tiri Liberi", team_perc("TL"))
 
         # 2. BOX SCORE INDIVIDUALE
-        st.subheader("👤 Dettaglio Giocatori")
+        st.subheader("👤 Performance Giocatori")
         def get_stat(player_df, shot_type):
             sub = player_df[player_df['type'] == shot_type]
             return f"{sub['made'].sum()}/{len(sub)}" if not sub.empty else "0/0"
