@@ -12,9 +12,10 @@ st.set_page_config(page_title="Scout Basket PRO", layout="centered")
 if not check_password():
     st.stop()
 
+# Recuperiamo l'username dalla sessione (settato in auth.py)
 user_id = st.session_state.username
 
-# 2. CARICAMENTO DATI UTENTE
+# 2. CARICAMENTO DATI (Passiamo user_id come richiesto da engine.py)
 if 'shots' not in st.session_state:
     st.session_state.shots = load_shots(user_id)
 
@@ -38,23 +39,19 @@ with st.sidebar.expander("➕ Aggiungi Giocatore"):
             save_player_to_roster(user_id, new_n, final_sq)
             st.rerun()
 
-up_file = st.sidebar.file_uploader("📂 Carica CSV Roster", type=["csv"])
-if up_file:
-    df_up = pd.read_csv(up_file)
-    df_up.to_csv(f"data_users/{user_id}/roster.csv", index=False)
-    st.sidebar.success("Roster caricato!")
-    st.rerun()
-
 # --- MAIN APP ---
 st.title("🏀 Scout Basket PRO")
 tipo = st.selectbox("Sessione:", ["Allenamento", "Partita"])
 
+# Selezione squadre
 c1, c2 = st.columns(2)
 teams_list = sorted(df_roster['squadra'].unique().tolist()) if not df_roster.empty else []
 t_home = c1.selectbox("Casa:", teams_list) if teams_list else c1.text_input("Casa:", "CASA").upper()
 t_away = c2.text_input("Ospite:", "OSPITE").upper() if tipo == "Partita" else None
 
 st.divider()
+
+# Input Azione
 col_t, col_p, col_m = st.columns([1, 1.5, 1])
 target_team = col_t.radio("Tira:", [t_home, t_away] if t_away else [t_home])
 giocatori = df_roster[df_roster['squadra'] == target_team]['nome'].tolist() if not df_roster.empty else []
@@ -63,9 +60,9 @@ p_time = col_m.text_input("Min:", "00:00") if tipo == "Partita" else "N/A"
 
 esito = st.radio("Esito:", ["Segnato", "Errore", "TL Segnato", "TL Sbagliato"], horizontal=True)
 
-# Grafico e Slider
+# Grafico
 is_tl = "TL" in esito
-cur_x, cur_y = (0, 142) if is_tl else (st.slider("Sposta X", -250, 250, 0, 10), st.slider("Distanza Y", -40, 420, 100, 10))
+cur_x, cur_y = (0, 142) if is_tl else (st.slider("X", -250, 250, 0, 10), st.slider("Y", -40, 420, 100, 10))
 fig = create_basketball_court(cur_x, cur_y, st.session_state.shots)
 st.plotly_chart(fig, use_container_width=True, config={'staticPlot': True, 'displayModeBar': False})
 
@@ -73,7 +70,11 @@ if st.button("✅ REGISTRA TIRO", type="primary", use_container_width=True):
     s_type = "TL" if is_tl else get_shot_type(cur_x, cur_y)
     made = "Segnato" in esito
     pts = 1 if is_tl else (int(s_type[0]) if made else 0)
-    st.session_state.shots.append({"team": target_team, "player": p_name, "tempo": p_time, "x": cur_x, "y": cur_y, "made": made, "type": s_type, "punti": pts})
+    
+    st.session_state.shots.append({
+        "team": target_team, "player": p_name, "tempo": p_time, 
+        "x": cur_x, "y": cur_y, "made": made, "type": s_type, "punti": pts
+    })
     save_shots(user_id, st.session_state.shots)
     st.rerun()
 
@@ -87,14 +88,6 @@ if st.session_state.shots:
     
     df_t = df[df['team'] == target_team]
     if not df_t.empty:
-        st.write(f"📊 Stats {target_team}:")
         stats = df_t.groupby('player').agg(PTS=('punti', 'sum'), Seg=('made', 'sum'), Tot=('made', 'count'))
         stats['%'] = (stats['Seg']/stats['Tot']*100).round(1).astype(str)+'%'
         st.table(stats.sort_values(by='PTS', ascending=False))
-        
-        pdf_b, csv_b = st.columns(2)
-        csv_b.download_button("📥 CSV", df.to_csv(index=False).encode('utf-8'), "partita.csv")
-        try:
-            pdf_data = generate_player_report(df, t_home)
-            pdf_b.download_button("📄 PDF", pdf_data, "Report.pdf", "application/pdf")
-        except: pass
