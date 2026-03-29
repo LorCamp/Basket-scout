@@ -3,19 +3,27 @@ import pandas as pd
 import os
 from auth import check_password
 from engine import get_shot_type, save_shots, load_shots, load_roster, save_player_to_roster
-from reports import generate_player_report
 from court_graphics import create_basketball_court
 
+# Configurazione pagina
 st.set_page_config(page_title="Scout Basket PRO", layout="centered")
 
-# 1. ACCESSO
+# 1. AUTENTICAZIONE
 if not check_password():
     st.stop()
 
-# Recuperiamo l'username dalla sessione (settato in auth.py)
-user_id = st.session_state.username
+# Recupero username sicuro dalla sessione
+user_id = st.session_state.get("username")
 
-# 2. CARICAMENTO DATI (Passiamo user_id come richiesto da engine.py)
+# Se per qualche motivo l'id manca, fermiamo tutto per evitare il TypeError
+if not user_id:
+    st.error("Errore di sessione: Utente non trovato. Effettua di nuovo il login.")
+    if st.button("Reset Login"):
+        st.session_state.authenticated = False
+        st.rerun()
+    st.stop()
+
+# 2. CARICAMENTO DATI (Sincronizzato con engine.py)
 if 'shots' not in st.session_state:
     st.session_state.shots = load_shots(user_id)
 
@@ -24,8 +32,7 @@ df_roster = load_roster(user_id)
 # --- SIDEBAR ---
 st.sidebar.title(f"👤 Coach: {user_id}")
 if st.sidebar.button("Logout"):
-    st.session_state.authenticated = False
-    st.session_state.username = None
+    st.session_state.clear() # Pulisce tutto per sicurezza
     st.rerun()
 
 st.sidebar.divider()
@@ -39,11 +46,10 @@ with st.sidebar.expander("➕ Aggiungi Giocatore"):
             save_player_to_roster(user_id, new_n, final_sq)
             st.rerun()
 
-# --- MAIN APP ---
+# --- INTERFACCIA ---
 st.title("🏀 Scout Basket PRO")
 tipo = st.selectbox("Sessione:", ["Allenamento", "Partita"])
 
-# Selezione squadre
 c1, c2 = st.columns(2)
 teams_list = sorted(df_roster['squadra'].unique().tolist()) if not df_roster.empty else []
 t_home = c1.selectbox("Casa:", teams_list) if teams_list else c1.text_input("Casa:", "CASA").upper()
@@ -51,7 +57,7 @@ t_away = c2.text_input("Ospite:", "OSPITE").upper() if tipo == "Partita" else No
 
 st.divider()
 
-# Input Azione
+# Input Tiro
 col_t, col_p, col_m = st.columns([1, 1.5, 1])
 target_team = col_t.radio("Tira:", [t_home, t_away] if t_away else [t_home])
 giocatori = df_roster[df_roster['squadra'] == target_team]['nome'].tolist() if not df_roster.empty else []
