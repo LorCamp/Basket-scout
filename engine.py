@@ -48,6 +48,5 @@ def delete_last_shot(user_id):
 def get_shot_type(x, y):
     """Determina se il tiro è da 2 o 3 punti."""
     dist = (x**2 + y**2)**0.5
-    if y < 92.5 and abs(x) > 220: 
-        return "3PT"
+    if y < 92.5 and abs(x) > 220: return "3PT"
     return "3PT" if dist > 237.5 else "2PT"
