@@ -3,38 +3,24 @@ import numpy as np
 import pandas as pd
 
 def create_basketball_court(px, py, shots_list):
-    """
-    Disegna un campo da basket interattivo con Plotly v1.55+.
-    px, py: Coordinate correnti del mirino (stella gialla).
-    shots_list: Storico tiri registrati.
-    """
     fig = go.Figure()
 
-    # --- DISEGNO CAMPO (Linee fisse) ---
-    # Perimetro e Area
+    # --- DISEGNO CAMPO ---
     fig.add_shape(type="rect", x0=-250, y0=-47.5, x1=250, y1=422.5, line_color="white", line_width=2)
     fig.add_shape(type="rect", x0=-80, y0=-47.5, x1=80, y1=142.5, line_color="white", line_width=2)
-    
-    # Lunetta (cerchio tiri liberi)
     t_f = np.linspace(0, np.pi, 30)
     fig.add_trace(go.Scatter(x=80*np.cos(t_f), y=142.5+80*np.sin(t_f), mode='lines', line_color='white', showlegend=False, hoverinfo='skip'))
-    
-    # Linee da 3 punti (laterali e arco)
     fig.add_shape(type="line", x0=-220, y0=-47.5, x1=-220, y1=92.5, line_color="white", line_width=2)
     fig.add_shape(type="line", x0=220, y0=-47.5, x1=220, y1=92.5, line_color="white", line_width=2)
-    
     ang = np.arcsin(92.5/237.5)
     t_a = np.linspace(ang, np.pi - ang, 60)
     fig.add_trace(go.Scatter(x=237.5*np.cos(t_a), y=237.5*np.sin(t_a), mode='lines', line_color='white', showlegend=False, hoverinfo='skip'))
-    
-    # Canestro e Tabellone (semplificato)
     fig.add_shape(type="circle", x0=-7.5, y0=-7.5, x1=7.5, y1=7.5, line_color="orange")
     fig.add_shape(type="line", x0=-30, y0=-7.5, x1=30, y1=-7.5, line_color="white", line_width=3)
 
-    # --- STORICO TIRI (Pallini verdi e rossi) ---
+    # --- STORICO TIRI ---
     if shots_list:
         df_s = pd.DataFrame(shots_list)
-        # Tiri realizzati (Verdi) / Sbagliati (Rossi)
         for m, c, s in [(True, "#2ecc71", "circle"), (False, "#e74c3c", "x")]:
             mask = df_s[df_s['made'] == m]
             if not mask.empty:
@@ -42,23 +28,20 @@ def create_basketball_court(px, py, shots_list):
                                          marker=dict(color=c, size=10, symbol=s), 
                                          showlegend=False, hoverinfo='skip'))
 
-    # --- MIRINO ATTUALE (Stella Gialla) ---
+    # --- MIRINO STELLA ---
     fig.add_trace(go.Scatter(x=[px], y=[py], mode='markers', 
                              marker=dict(color='yellow', size=18, symbol='star', line=dict(width=2, color='black')), 
-                             name="Qui", showlegend=False))
+                             showlegend=False))
 
-    # --- CONFIGURAZIONE INTERATTIVITÀ ---
+    # --- CONFIGURAZIONE ANTI-RETTANGOLO ---
     fig.update_layout(
         width=420, height=500, template="plotly_dark",
-        xaxis=dict(range=[-260, 260], visible=False, fixedrange=True),
+        xaxis=dict(range=[-260, 260], visible=False, fixedrange=True), # fixedrange impedisce lo zoom/trascinamento
         yaxis=dict(range=[-60, 450], visible=False, fixedrange=True, scaleanchor="x"),
         margin=dict(l=5, r=5, t=5, b=5),
-        
-        clickmode='event+select', # Fondamentale per on_select
-        
-        # --- FIX RETTANGOLO SELECTION ---
-        dragmode=False,          # <--- BLOCCA IL DISEGNO DEL RETTANGOLO!
-        hovermode=False,         # Rimuove i fumetti fastidiosi al tocco
-        selectdirection=None     # Impedisce selezioni direzionali
+        clickmode='event+select',
+        dragmode=False,   # Disabilita esplicitamente il drag
+        hovermode=False,
+        modebar_remove=['select2d', 'lasso2d', 'zoom2d', 'pan2d'] # Rimuove gli strumenti di selezione
     )
     return fig
