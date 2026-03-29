@@ -25,7 +25,7 @@ df_roster = load_roster()
 # --- SIDEBAR: GESTIONE ROSTER E FILE ---
 st.sidebar.title("⚙️ Pannello Controllo")
 
-if st.sidebar.button("🚨 NUOVA PARTITA (Reset)", use_container_width=True):
+if st.sidebar.button("🚨 NUOVA PARTITA (Reset)", key="reset_btn"):
     st.session_state.shots = []
     save_shots([])
     st.rerun()
@@ -44,7 +44,7 @@ else:
 
 r_name = st.sidebar.text_input("Nome Giocatore:").upper().strip()
 
-if st.sidebar.button("➕ Salva nel Roster", use_container_width=True, type="primary"):
+if st.sidebar.button("➕ Salva nel Roster", type="primary", key="save_roster"):
     if r_name and r_team:
         save_player_to_roster(r_name, r_team)
         st.sidebar.success(f"Aggiunto: {r_name}")
@@ -58,8 +58,7 @@ if not df_roster.empty:
         label="📥 Scarica Roster",
         data=df_roster.to_csv(index=False).encode('utf-8'),
         file_name="mio_roster_basket.csv",
-        mime="text/csv",
-        use_container_width=True
+        mime="text/csv"
     )
 
 uploaded_file = st.sidebar.file_uploader("📂 Carica Roster", type=["csv"])
@@ -116,8 +115,8 @@ else:
 st.write("📍 **Tocca il punto del tiro sul campo:**")
 fig_court = create_basketball_court(current_x, current_y, st.session_state.shots)
 
-# Widget Plotly con cattura selezione
-event = st.plotly_chart(fig_court, use_container_width=True, on_select="rerun", config={'displayModeBar': False})
+# Per i grafici, usiamo width=None per permettere al CSS di gestire la responsività o una larghezza fissa
+event = st.plotly_chart(fig_court, on_select="rerun", config={'displayModeBar': False})
 
 # Se l'utente tocca il campo, aggiorniamo la stella gialla
 if event and "selection" in event and event["selection"]["points"]:
@@ -128,7 +127,7 @@ if event and "selection" in event and event["selection"]["points"]:
     st.rerun()
 
 # --- BOTTONE REGISTRAZIONE ---
-if st.button("✅ REGISTRA AZIONE", use_container_width=True, type="primary"):
+if st.button("✅ REGISTRA AZIONE", type="primary", key="reg_azione"):
     final_x = 0 if is_tl else st.session_state.last_touch["x"]
     final_y = 142 if is_tl else st.session_state.last_touch["y"]
     
@@ -161,16 +160,16 @@ if st.session_state.shots:
     st.divider()
     c_del, c_csv, c_pdf = st.columns(3)
     
-    if c_del.button("⬅️ Elimina Ultimo", use_container_width=True):
+    if c_del.button("⬅️ Elimina Ultimo", key="del_last"):
         if st.session_state.shots:
             st.session_state.shots.pop()
             save_shots(st.session_state.shots)
             st.rerun()
             
-    c_csv.download_button("📥 Scarica CSV", df.to_csv(index=False).encode('utf-8'), "partita.csv", use_container_width=True)
+    c_csv.download_button("📥 Scarica CSV", df.to_csv(index=False).encode('utf-8'), "partita.csv")
     
     try:
         pdf_bytes = generate_player_report(df, team_home)
-        c_pdf.download_button("📄 Genera PDF", pdf_bytes, f"Report_{team_home}.pdf", "application/pdf", use_container_width=True)
+        c_pdf.download_button("📄 Genera PDF", pdf_bytes, f"Report_{team_home}.pdf", "application/pdf")
     except:
         st.error("Errore generazione PDF")
