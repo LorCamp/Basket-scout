@@ -6,16 +6,17 @@ from engine import get_shot_type, save_shots, load_shots, load_roster, save_play
 from reports import generate_player_report
 from court_graphics import create_basketball_court
 
-# 1. PROTEZIONE ACCESSO
+# 1. PROTEZIONE ACCESSO (Password)
 if not check_password():
     st.stop()
 
 # 2. CONFIGURAZIONE PAGINA
 st.set_page_config(page_title="Basket Scout PRO", layout="centered", page_icon="🏀")
 
-# --- FIX CSS PER TOUCH MOBILE ---
+# --- FIX CSS PER TOUCH MOBILE v1.55+ ---
 st.markdown("""
     <style>
+    /* Impedisce al browser di interpretare lo scroll quando si tocca il grafico */
     .stPlotlyChart {
         touch-action: none;
         border: 1px solid #444;
@@ -44,7 +45,6 @@ if st.sidebar.button("🚨 NUOVA PARTITA (Reset Tiri)", key="reset_game"):
 st.sidebar.divider()
 st.sidebar.subheader("👥 Gestione Roster")
 
-# Selezione/Creazione Squadra
 teams = sorted(df_roster['squadra'].unique().tolist()) if not df_roster.empty else []
 s_squadra = st.sidebar.selectbox("Squadra:", teams + ["+ NUOVA..."], key="sb_sq")
 r_team = st.sidebar.text_input("Nome Nuova Squadra:").upper() if s_squadra == "+ NUOVA..." else s_squadra
@@ -78,11 +78,9 @@ if uploaded_file is not None:
     except:
         st.sidebar.error("Errore nel file")
 
-# --- SEZIONE AGGIUNTA: CANCELLA ROSTER ---
-st.sidebar.divider()
 with st.sidebar.expander("⚠️ Zona Pericolo"):
-    conf_delete = st.checkbox("Confermo cancellazione roster")
-    if st.button("🗑️ CANCELLA TUTTO IL ROSTER", type="secondary", disabled=not conf_delete):
+    conf_delete = st.checkbox("Confermo cancellazione roster", key="confirm_delete_cb")
+    if st.sidebar.button("🗑️ CANCELLA TUTTO IL ROSTER", disabled=not conf_delete, type="secondary", key="del_roster_btn"):
         empty_df = pd.DataFrame(columns=['nome', 'squadra'])
         empty_df.to_csv("roster.csv", index=False)
         st.rerun()
@@ -103,31 +101,37 @@ with col_a:
 
 st.divider()
 
-# Selezione Azione
+# Input Azione
 c1, c2, c3 = st.columns([1, 2, 1])
-p_team = c1.radio("Team:", [t_home, t_away] if t_away else [t_home])
+p_team = c1.radio("Team tira:", [t_home, t_away] if t_away else [t_home], key="team_shoots_radio")
 giocatori = df_roster[df_roster['squadra'] == p_team]['nome'].tolist() if not df_roster.empty else []
-p_name = c2.selectbox("Giocatore:", giocatori) if giocatori else c2.text_input("Nome:")
-p_time = c3.text_input("Tempo:", "00:00")
+p_name = c2.selectbox("Giocatore:", giocatori, key="player_select") if giocatori else c2.text_input("Nome Giocatore:", key="player_manual")
+p_time = c3.text_input("Tempo:", "00:00", key="time_input")
 
-esito = st.radio("Esito:", ["Canestro (Campo)", "Errore (Campo)", "TL Segnato", "TL Sbagliato"], horizontal=True)
+esito = st.radio("Esito:", ["Canestro (Campo)", "Errore (Campo)", "TL Segnato", "TL Sbagliato"], horizontal=True, key="outcome_radio")
 
 # Gestione Coordinate
 is_tl = "TL" in esito
-cx = 0 if is_tl else st.session_state.last_touch["x"]
-cy = 142 if is_tl else st.session_state.last_touch["y"]
+if is_tl:
+    # Lunetta dei Tiri Liberi (fissa)
+    cx, cy = 0, 142
+else:
+    # Ultimo tocco o default
+    cx, cy = st.session_state.last_touch["x"], st.session_state.last_touch["y"]
 
-# --- CAMPO INTERATTIVO ---
-st.write("📍 **Tocca il punto del tiro:**")
+# --- CAMPO INTERATTIVO (TOUCH Fix Rettangolo) ---
+st.write("📍 **Tocca il punto del tiro sul campo:**")
 fig = create_basketball_court(cx, cy, st.session_state.shots)
 
-event = st.plotly_chart(fig, on_select="rerun", key="court_v155", config={'displayModeBar': False})
+# Widget Plotly con on_select
+event = st.plotly_chart(fig, on_select="rerun", key="court_mobile", config={'displayModeBar': False})
 
-if event and "selection" in event and event["selection"].get("points"):
-    new_x = event["selection"]["points"][0]["x"]
-    new_y = event["selection"]["points"][0]["y"]
-    if not is_tl:
-        st.session_state.last_touch = {"x": new_x, "y": new_y}
+# Logica di cattura avanzata per v1.55+ (solo punti singoli)
+if event and "selection" in event:
+    pts = event["selection"].get("points", [])
+    if pts:
+        # Se c'è un punto, prendiamo le coordinate X e Y
+        st.session_state.last_touch = {"x": pts[0]["x"], "y": pts[0]["y"]}
         st.rerun()
 
 if st.button("✅ REGISTRA AZIONE", type="primary", key="save_btn"):
@@ -138,11 +142,14 @@ if st.button("✅ REGISTRA AZIONE", type="primary", key="save_btn"):
     made = "Canestro" in esito or "Segnato" in esito
     pts = 1 if is_tl else (int(s_type[0]) if made else 0)
     
+    # Salvataggio
     st.session_state.shots.append({
         "sessione": tipo_s, "team": p_team, "player": p_name, "tempo": p_time,
         "x": final_x, "y": final_y, "made": made, "type": s_type, "punti": pts
     })
     save_shots(st.session_state.shots)
+    # Reset stella per la prossima azione
+    st.session_state.last_touch = {"x": 0, "y": 100}
     st.rerun()
 
 # --- STATISTICHE ---
@@ -151,7 +158,7 @@ if st.session_state.shots:
     st.divider()
     df_t = df[df['team'] == p_team]
     if not df_t.empty:
-        st.subheader(f"📊 {p_team}")
+        st.subheader(f"📊 Statistiche {p_team}")
         met = st.columns(3)
         for i, t in enumerate(["2PT", "3PT", "TL"]):
             sub = df_t[df_t['type'] == t]
@@ -160,14 +167,14 @@ if st.session_state.shots:
 
     st.divider()
     b1, b2, b3 = st.columns(3)
-    if b1.button("⬅️ Elimina Ultimo"):
+    if b1.button("⬅️ Elimina Ultimo", key="del_last"):
         if st.session_state.shots:
             st.session_state.shots.pop()
             save_shots(st.session_state.shots)
             st.rerun()
-    b2.download_button("📥 CSV", df.to_csv(index=False).encode('utf-8'), "scout.csv")
+    b2.download_button("📥 Scarica CSV", df.to_csv(index=False).encode('utf-8'), "partita.csv", key="download_csv_btn")
     try:
-        pdf = generate_player_report(df, t_home)
-        b3.download_button("📄 PDF", pdf, f"Report_{t_home}.pdf", "application/pdf")
+        pdf_bytes = generate_player_report(df, t_home)
+        b3.download_button("📄 PDF Report", pdf_bytes, f"Report_{t_home}.pdf", "application/pdf", key="download_pdf_btn")
     except:
-        st.error("Errore PDF")
+        st.error("Errore generazione PDF")
