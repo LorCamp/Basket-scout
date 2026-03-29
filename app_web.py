@@ -32,10 +32,10 @@ if 'last_touch' not in st.session_state:
 
 df_roster = load_roster()
 
-# --- SIDEBAR COMPLETA ---
+# --- SIDEBAR ---
 st.sidebar.title("⚙️ Controllo")
 
-if st.sidebar.button("🚨 NUOVA PARTITA", key="reset_game"):
+if st.sidebar.button("🚨 NUOVA PARTITA (Reset Tiri)", key="reset_game"):
     st.session_state.shots = []
     save_shots([])
     st.session_state.last_touch = {"x": 0, "y": 100}
@@ -58,7 +58,6 @@ if st.sidebar.button("➕ Salva Giocatore", type="primary", key="save_pl"):
 st.sidebar.divider()
 st.sidebar.subheader("💾 Backup & Caricamento")
 
-# --- SEZIONE RIPRISTINATA: CARICAMENTO ROSTER ---
 if not df_roster.empty:
     st.sidebar.download_button(
         label="📥 Scarica Roster Attuale",
@@ -76,10 +75,17 @@ if uploaded_file is not None:
             new_df[['nome', 'squadra']].to_csv("roster.csv", index=False)
             st.sidebar.success("✅ Roster caricato!")
             st.rerun()
-        else:
-            st.sidebar.error("CSV non valido (colonne: nome, squadra)")
-    except Exception as e:
+    except:
         st.sidebar.error("Errore nel file")
+
+# --- SEZIONE AGGIUNTA: CANCELLA ROSTER ---
+st.sidebar.divider()
+with st.sidebar.expander("⚠️ Zona Pericolo"):
+    conf_delete = st.checkbox("Confermo cancellazione roster")
+    if st.button("🗑️ CANCELLA TUTTO IL ROSTER", type="secondary", disabled=not conf_delete):
+        empty_df = pd.DataFrame(columns=['nome', 'squadra'])
+        empty_df.to_csv("roster.csv", index=False)
+        st.rerun()
 
 # --- MAIN APP ---
 st.title("🏀 Basket Scout PRO")
