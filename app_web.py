@@ -119,18 +119,30 @@ else:
     # Ultimo tocco o default
     cx, cy = st.session_state.last_touch["x"], st.session_state.last_touch["y"]
 
-# --- CAMPO INTERATTIVO (TOUCH Fix Rettangolo) ---
-st.write("📍 **Tocca il punto del tiro sul campo:**")
+# --- CAMPO INTERATTIVO ---
+st.write("📍 **Tocca il punto del tiro:**")
 fig = create_basketball_court(cx, cy, st.session_state.shots)
 
-# Widget Plotly con on_select
-event = st.plotly_chart(fig, on_select="rerun", key="court_mobile", config={'displayModeBar': False})
+# CONFIGURAZIONE AGGRESSIVA:
+# 'staticPlot': False permette il click, ma blocchiamo tutto il resto
+event = st.plotly_chart(
+    fig, 
+    on_select="rerun", 
+    key="court_strict", 
+    config={
+        'displayModeBar': False, 
+        'modeBarButtonsToRemove': ['select2d', 'lasso2d'],
+        'displaylogo': False,
+        'showAxisDragHandles': False,
+        'showAxisRangeEntryBoxes': False
+    }
+)
 
-# Logica di cattura avanzata per v1.55+ (solo punti singoli)
+# Gestione cattura tocco
 if event and "selection" in event:
     pts = event["selection"].get("points", [])
     if pts:
-        # Se c'è un punto, prendiamo le coordinate X e Y
+        # Aggiorna la posizione solo se è un tocco valido
         st.session_state.last_touch = {"x": pts[0]["x"], "y": pts[0]["y"]}
         st.rerun()
 
