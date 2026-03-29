@@ -38,7 +38,7 @@ def load_shots(user_id):
     return []
 
 def delete_last_shot(user_id):
-    """Elimina fisicamente l'ultimo tiro dal file CSV."""
+    """Elimina l'ultimo tiro dal file CSV."""
     shots = load_shots(user_id)
     if shots:
         shots.pop()
