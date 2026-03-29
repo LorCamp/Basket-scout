@@ -5,59 +5,30 @@ from engine import get_shot_type, save_shots, load_shots, load_roster, save_play
 from reports import generate_player_report
 from court_graphics import create_basketball_court
 
-# 1. Accesso
+# Controllo Accesso
 if not check_password():
     st.stop()
 
-st.set_page_config(page_title="Scout Basket PRO", layout="centered", page_icon="🏀")
+# Benvenuto
+st.sidebar.write(f"👤 Coach: **{st.session_state.username}**")
+if st.sidebar.button("Log Out"):
+    st.session_state.authenticated = False
+    st.rerun()
 
-# Inizializzazione dati
+# Caricamento Dati Utente
 if 'shots' not in st.session_state:
     st.session_state.shots = load_shots()
 
 df_roster = load_roster()
 
-# --- SIDEBAR: GESTIONE ROSTER & CARICAMENTO ---
-st.sidebar.title("👥 Gestione Roster")
-
-# --- SEZIONE CARICAMENTO ESTERNO ---
-st.sidebar.subheader("📂 Carica da File")
-uploaded_file = st.sidebar.file_uploader("Carica CSV Roster (Colonne: nome, squadra)", type=["csv"])
-if uploaded_file is not None:
-    try:
-        new_df = pd.read_csv(uploaded_file)
-        # Pulizia nomi colonne
-        new_df.columns = [c.strip().lower() for c in new_df.columns]
-        if 'nome' in new_df.columns and 'squadra' in new_df.columns:
-            new_df[['nome', 'squadra']].to_csv("roster.csv", index=False)
-            st.sidebar.success("✅ Roster caricato con successo!")
-            st.rerun()
-        else:
-            st.sidebar.error("Il CSV deve avere le colonne 'nome' e 'squadra'")
-    except Exception as e:
-        st.sidebar.error(f"Errore nel file: {e}")
-
+# --- SIDEBAR: CARICAMENTO ROSTER PERSONALE ---
 st.sidebar.divider()
-
-# Aggiunta manuale giocatore
-with st.sidebar.expander("➕ Aggiungi Giocatore Singolo"):
-    teams_in_roster = sorted(df_roster['squadra'].unique().tolist()) if not df_roster.empty else []
-    sq_new = st.selectbox("Squadra:", teams_in_roster + ["+ NUOVA..."], key="new_sq_sb")
-    r_team = st.text_input("Nome Squadra:").upper() if sq_new == "+ NUOVA..." else sq_new
-    r_name = st.text_input("Nome Giocatore:").upper()
-    if st.button("Salva nel Roster"):
-        if r_name and r_team:
-            save_player_to_roster(r_name, r_team)
-            st.rerun()
-
-if st.sidebar.button("🗑️ SVUOTA TUTTO IL ROSTER"):
-    pd.DataFrame(columns=['nome', 'squadra']).to_csv("roster.csv", index=False)
-    st.rerun()
-
-st.sidebar.divider()
-if st.sidebar.button("🚨 Reset Tiri Partita"):
-    st.session_state.shots = []
-    save_shots([])
+st.sidebar.subheader("📂 Carica il tuo Roster")
+up_file = st.sidebar.file_uploader("CSV (nome, squadra)", type=["csv"])
+if up_file:
+    df_up = pd.read_csv(up_file)
+    df_up.to_csv(f"data_users/{st.session_state.username}/roster.csv", index=False)
+    st.sidebar.success("Roster aggiornato!")
     st.rerun()
 
 # --- MAIN APP ---
