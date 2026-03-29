@@ -17,18 +17,42 @@ if 'shots' not in st.session_state:
 
 df_roster = load_roster()
 
-# --- SIDEBAR ---
-st.sidebar.title("⚙️ Gestione Roster")
-teams_in_roster = sorted(df_roster['squadra'].unique().tolist()) if not df_roster.empty else []
+# --- SIDEBAR: GESTIONE ROSTER & CARICAMENTO ---
+st.sidebar.title("👥 Gestione Roster")
 
-with st.sidebar.expander("➕ Aggiungi Giocatore"):
-    sq_new = st.selectbox("Squadra Roster:", teams_in_roster + ["+ NUOVA..."])
+# --- SEZIONE CARICAMENTO ESTERNO ---
+st.sidebar.subheader("📂 Carica da File")
+uploaded_file = st.sidebar.file_uploader("Carica CSV Roster (Colonne: nome, squadra)", type=["csv"])
+if uploaded_file is not None:
+    try:
+        new_df = pd.read_csv(uploaded_file)
+        # Pulizia nomi colonne
+        new_df.columns = [c.strip().lower() for c in new_df.columns]
+        if 'nome' in new_df.columns and 'squadra' in new_df.columns:
+            new_df[['nome', 'squadra']].to_csv("roster.csv", index=False)
+            st.sidebar.success("✅ Roster caricato con successo!")
+            st.rerun()
+        else:
+            st.sidebar.error("Il CSV deve avere le colonne 'nome' e 'squadra'")
+    except Exception as e:
+        st.sidebar.error(f"Errore nel file: {e}")
+
+st.sidebar.divider()
+
+# Aggiunta manuale giocatore
+with st.sidebar.expander("➕ Aggiungi Giocatore Singolo"):
+    teams_in_roster = sorted(df_roster['squadra'].unique().tolist()) if not df_roster.empty else []
+    sq_new = st.selectbox("Squadra:", teams_in_roster + ["+ NUOVA..."], key="new_sq_sb")
     r_team = st.text_input("Nome Squadra:").upper() if sq_new == "+ NUOVA..." else sq_new
     r_name = st.text_input("Nome Giocatore:").upper()
     if st.button("Salva nel Roster"):
         if r_name and r_team:
             save_player_to_roster(r_name, r_team)
             st.rerun()
+
+if st.sidebar.button("🗑️ SVUOTA TUTTO IL ROSTER"):
+    pd.DataFrame(columns=['nome', 'squadra']).to_csv("roster.csv", index=False)
+    st.rerun()
 
 st.sidebar.divider()
 if st.sidebar.button("🚨 Reset Tiri Partita"):
@@ -39,10 +63,10 @@ if st.sidebar.button("🚨 Reset Tiri Partita"):
 # --- MAIN APP ---
 st.title("🏀 Scout Basket PRO")
 
-# 1. IMPOSTAZIONI SESSIONE
 tipo_sessione = st.selectbox("Tipo Sessione:", ["Allenamento", "Partita"])
 
 col_t1, col_t2 = st.columns(2)
+teams_in_roster = sorted(df_roster['squadra'].unique().tolist()) if not df_roster.empty else []
 t_home = col_t1.selectbox("Squadra Casa (Noi):", teams_in_roster) if teams_in_roster else col_t1.text_input("Squadra Casa:", "CASA").upper()
 t_away = None
 if tipo_sessione == "Partita":
@@ -50,7 +74,7 @@ if tipo_sessione == "Partita":
 
 st.divider()
 
-# 2. SELEZIONE AZIONE
+# Selezione Azione
 c_team, c_player, c_time = st.columns([1, 1.5, 1])
 target_team = c_team.radio("Team tira:", [t_home, t_away] if t_away else [t_home], horizontal=True)
 
@@ -66,7 +90,7 @@ else:
 p_time = c_time.text_input("Minuto:", "00:00") if tipo_sessione == "Partita" else "N/A"
 esito = st.radio("Risultato:", ["Segnato", "Errore", "TL Segnato", "TL Sbagliato"], horizontal=True)
 
-# 3. POSIZIONAMENTO
+# Posizionamento
 is_tl = "TL" in esito
 if is_tl:
     cur_x, cur_y = 0, 142
@@ -89,50 +113,48 @@ if st.button("✅ REGISTRA AZIONE", type="primary", use_container_width=True):
     save_shots(st.session_state.shots)
     st.rerun()
 
-# --- 4. STATISTICHE AVANZATE ---
+# --- STATISTICHE ---
 if st.session_state.shots:
     st.divider()
     df = pd.DataFrame(st.session_state.shots)
-    df_team = df[df['team'] == target_team]
+    
+    # 1. LIVE SCORE COMPARISON
+    st.subheader("🏆 Punteggio Live")
+    s1, s2 = st.columns(2)
+    s1.metric(t_home, f"{df[df['team']==t_home]['punti'].sum()} pts")
+    if t_away:
+        s2.metric(t_away, f"{df[df['team']==t_away]['punti'].sum()} pts")
 
+    # 2. STATS SQUADRA SELEZIONATA
+    df_team = df[df['team'] == target_team]
     if not df_team.empty:
-        # --- BOX SCORE SQUADRA ---
-        st.subheader(f"📊 Stats Squadra: {target_team}")
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Punti", df_team['punti'].sum())
-        
+        st.write(f"📊 **Dettaglio Percentuali: {target_team}**")
+        m1, m2, m3 = st.columns(3)
         for i, t in enumerate(["2PT", "3PT", "TL"]):
             sub = df_team[df_team['type'] == t]
             m, tot = len(sub[sub['made']==True]), len(sub)
             perc = f"{(m/tot*100):.1f}%" if tot > 0 else "0%"
-            [m2, m3, m4][i].metric(t, f"{m}/{tot}", perc)
+            [m1, m2, m3][i].metric(t, f"{m}/{tot}", perc)
 
-        # --- TABELLA GIOCATORI CON PERCENTUALI ---
-        st.subheader("👤 Performance Singoli")
-        
-        # Calcolo statistiche per giocatore
+        # 3. TABELLA GIOCATORI
+        st.write("👤 **Performance Giocatori**")
         stats = df_team.groupby('player').agg(
             PTS=('punti', 'sum'),
             Segnati=('made', 'sum'),
             Totali=('made', 'count')
         )
-        # Calcolo percentuale e formattazione
         stats['%'] = (stats['Segnati'] / stats['Totali'] * 100).round(1).astype(str) + '%'
-        
-        # Ordina per punti e mostra
         st.table(stats.sort_values(by='PTS', ascending=False))
 
-    # --- 5. EXPORT ---
+    # --- EXPORT ---
     st.divider()
     exp_col1, exp_col2, exp_col3 = st.columns(3)
     exp_col1.download_button("📥 CSV", df.to_csv(index=False).encode('utf-8'), "scout.csv", use_container_width=True)
-    
     try:
         pdf_data = generate_player_report(df, t_home)
         exp_col2.download_button("📄 PDF", pdf_data, f"Report_{t_home}.pdf", "application/pdf", use_container_width=True)
     except:
         exp_col2.error("Errore PDF")
-
     if exp_col3.button("⬅️ Cancella Ultimo", use_container_width=True):
         st.session_state.shots.pop()
         save_shots(st.session_state.shots)
