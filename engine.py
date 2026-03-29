@@ -1,41 +1,38 @@
-import numpy as np
-import json
-import os
 import pandas as pd
+import os
 
-def get_shot_type(x, y):
-    dist = np.sqrt(x**2 + y**2)
-    if dist >= 237.5 or (abs(x) > 220 and y < 92.5):
-        return "3PT"
-    return "2PT"
-
-def save_shots(shots):
-    with open("sessione_tiri.json", "w") as f:
-        json.dump(shots, f)
-
-def load_shots():
-    if os.path.exists("sessione_tiri.json"):
-        try:
-            with open("sessione_tiri.json", "r") as f:
-                return json.load(f)
-        except: return []
-    return []
+def get_user_folder():
+    """Ritorna il percorso della cartella dell'utente corrente."""
+    user = st.session_state.username
+    path = f"data_users/{user}"
+    if not os.path.exists(path):
+        os.makedirs(path)
+    return path
 
 def load_roster():
-    if os.path.exists("roster.csv"):
-        try:
-            return pd.read_csv("roster.csv")
-        except:
-            return pd.DataFrame(columns=['nome', 'squadra'])
+    import streamlit as st # Import locale per evitare conflitti
+    path = f"{get_user_folder()}/roster.csv"
+    if os.path.exists(path):
+        return pd.read_csv(path)
     return pd.DataFrame(columns=['nome', 'squadra'])
 
-def save_player_to_roster(name, team):
+def save_player_to_roster(nome, squadra):
     df = load_roster()
-    name = name.strip().upper()
-    team = team.strip().upper()
-    if not ((df['nome'] == name) & (df['squadra'] == team)).any():
-        new_row = pd.DataFrame({'nome': [name], 'squadra': [team]})
-        df = pd.concat([df, new_row], ignore_index=True)
-        df.to_csv("roster.csv", index=False)
-        return True
-    return False
+    new_p = pd.DataFrame([[nome, squadra]], columns=['nome', 'squadra'])
+    df = pd.concat([df, new_p], ignore_index=True).drop_duplicates()
+    df.to_csv(f"{get_user_folder()}/roster.csv", index=False)
+
+def save_shots(shots_list):
+    pd.DataFrame(shots_list).to_csv(f"{get_user_folder()}/shots.csv", index=False)
+
+def load_shots():
+    path = f"{get_user_folder()}/shots.csv"
+    if os.path.exists(path):
+        return pd.read_csv(path).to_dict('records')
+    return []
+
+def get_shot_type(x, y):
+    # Logica per determinare se è 2PT o 3PT (già esistente)
+    dist = (x**2 + y**2)**0.5
+    if y < 92.5 and abs(x) > 220: return "3PT"
+    return "3PT" if dist > 237.5 else "2PT"
