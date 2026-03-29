@@ -16,7 +16,6 @@ st.set_page_config(page_title="Basket Scout PRO", layout="centered", page_icon="
 # --- FIX CSS PER TOUCH MOBILE ---
 st.markdown("""
     <style>
-    /* Impedisce al browser di scrollare quando si tocca il grafico */
     .stPlotlyChart {
         touch-action: none;
         border: 1px solid #444;
@@ -33,8 +32,9 @@ if 'last_touch' not in st.session_state:
 
 df_roster = load_roster()
 
-# --- SIDEBAR ---
+# --- SIDEBAR COMPLETA ---
 st.sidebar.title("⚙️ Controllo")
+
 if st.sidebar.button("🚨 NUOVA PARTITA", key="reset_game"):
     st.session_state.shots = []
     save_shots([])
@@ -42,16 +42,44 @@ if st.sidebar.button("🚨 NUOVA PARTITA", key="reset_game"):
     st.rerun()
 
 st.sidebar.divider()
-st.sidebar.subheader("👥 Roster")
+st.sidebar.subheader("👥 Gestione Roster")
+
+# Selezione/Creazione Squadra
 teams = sorted(df_roster['squadra'].unique().tolist()) if not df_roster.empty else []
 s_squadra = st.sidebar.selectbox("Squadra:", teams + ["+ NUOVA..."], key="sb_sq")
 r_team = st.sidebar.text_input("Nome Nuova Squadra:").upper() if s_squadra == "+ NUOVA..." else s_squadra
 r_name = st.sidebar.text_input("Nome Giocatore:").upper()
 
-if st.sidebar.button("➕ Salva Giocatore", type="primary"):
+if st.sidebar.button("➕ Salva Giocatore", type="primary", key="save_pl"):
     if r_name and r_team:
         save_player_to_roster(r_name, r_team)
         st.rerun()
+
+st.sidebar.divider()
+st.sidebar.subheader("💾 Backup & Caricamento")
+
+# --- SEZIONE RIPRISTINATA: CARICAMENTO ROSTER ---
+if not df_roster.empty:
+    st.sidebar.download_button(
+        label="📥 Scarica Roster Attuale",
+        data=df_roster.to_csv(index=False).encode('utf-8'),
+        file_name="mio_roster_basket.csv",
+        mime="text/csv"
+    )
+
+uploaded_file = st.sidebar.file_uploader("📂 Carica Roster da CSV", type=["csv"], key="roster_upload")
+if uploaded_file is not None:
+    try:
+        new_df = pd.read_csv(uploaded_file)
+        new_df.columns = [c.strip().lower() for c in new_df.columns]
+        if 'nome' in new_df.columns and 'squadra' in new_df.columns:
+            new_df[['nome', 'squadra']].to_csv("roster.csv", index=False)
+            st.sidebar.success("✅ Roster caricato!")
+            st.rerun()
+        else:
+            st.sidebar.error("CSV non valido (colonne: nome, squadra)")
+    except Exception as e:
+        st.sidebar.error("Errore nel file")
 
 # --- MAIN APP ---
 st.title("🏀 Basket Scout PRO")
@@ -80,22 +108,19 @@ esito = st.radio("Esito:", ["Canestro (Campo)", "Errore (Campo)", "TL Segnato", 
 
 # Gestione Coordinate
 is_tl = "TL" in esito
-if is_tl:
-    cx, cy = 0, 142
-else:
-    cx, cy = st.session_state.last_touch["x"], st.session_state.last_touch["y"]
+cx = 0 if is_tl else st.session_state.last_touch["x"]
+cy = 142 if is_tl else st.session_state.last_touch["y"]
 
 # --- CAMPO INTERATTIVO ---
 st.write("📍 **Tocca il punto del tiro:**")
 fig = create_basketball_court(cx, cy, st.session_state.shots)
 
-# Cattura evento Touch
 event = st.plotly_chart(fig, on_select="rerun", key="court_v155", config={'displayModeBar': False})
 
 if event and "selection" in event and event["selection"].get("points"):
     new_x = event["selection"]["points"][0]["x"]
     new_y = event["selection"]["points"][0]["y"]
-    if not is_tl and (new_x != st.session_state.last_touch["x"] or new_y != st.session_state.last_touch["y"]):
+    if not is_tl:
         st.session_state.last_touch = {"x": new_x, "y": new_y}
         st.rerun()
 
