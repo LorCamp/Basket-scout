@@ -24,8 +24,18 @@ if st.sidebar.button("Logout"):
     st.rerun()
 
 st.sidebar.divider()
+
+# TASTO RESET SESSIONE (Sempre visibile in alto nella sidebar)
+if st.sidebar.button("🚨 RESET PARTITA (Pulisce tutto)", type="secondary", use_container_width=True):
+    st.session_state.shots = []
+    save_shots(user_id, [])
+    st.sidebar.success("Dati resettati!")
+    st.rerun()
+
+st.sidebar.divider()
+
 st.sidebar.subheader("📂 Importa Roster")
-up_file = st.sidebar.file_uploader("Carica .csv (numero, nome, ruolo, squadra)", type=["csv"])
+up_file = st.sidebar.file_uploader("Carica .csv", type=["csv"])
 if up_file:
     df_up = pd.read_csv(up_file)
     df_up.columns = [c.lower() for c in df_up.columns]
@@ -35,14 +45,14 @@ if up_file:
     st.sidebar.success("Roster caricato!")
     st.rerun()
 
-with st.sidebar.expander("➕ Aggiungi Giocatore"):
+with st.sidebar.expander("➕ Aggiungi Giocatore Manuale"):
     teams_db = sorted(df_roster['squadra'].unique().tolist()) if not df_roster.empty else []
     sq_in = st.selectbox("Squadra:", teams_db + ["+ NUOVA..."])
     final_sq = st.text_input("Nome Squadra:").upper() if sq_in == "+ NUOVA..." else sq_in
     c_num, c_ruolo = st.columns([1, 2])
     n_num = c_num.text_input("N°:")
     n_ruolo = c_ruolo.selectbox("Ruolo:", ["PG", "SG", "SF", "PF", "C"])
-    n_nome = st.text_input("Nome Giocatore:").upper()
+    n_nome = st.text_input("Nome:").upper()
     if st.button("Salva nel Roster"):
         if n_nome and final_sq and n_num:
             save_player_to_roster(user_id, n_num, n_nome, n_ruolo, final_sq)
@@ -66,22 +76,20 @@ if not df_team.empty:
 else:
     lista_giocatori, giocatori_dict = [], {}
 
-# --- GESTIONE QUINTETTO (Per +/-) ---
+# Quintetto per +/-
 with st.expander("👥 Quintetto in campo (per +/-)", expanded=False):
-    quintetto = st.multiselect("Seleziona i 5 giocatori in campo:", lista_giocatori, max_selections=5)
-    st.caption("Il Plus/Minus verrà calcolato solo per i giocatori selezionati qui quando viene segnato un canestro.")
+    quintetto = st.multiselect("Seleziona i 5 in campo:", lista_giocatori, max_selections=5)
 
-# --- SELEZIONE GIOCATORE ATTIVO ---
+# Selezione Giocatore
 col_p, col_m = st.columns([2, 1])
 if lista_giocatori:
     p_display = col_p.selectbox("Giocatore (Cerca n° o nome):", lista_giocatori)
     p_name = giocatori_dict.get(p_display)
 else:
-    p_name = col_p.text_input("Nome Giocatore (Roster Vuoto):", "PLAYER").upper()
-
+    p_name = col_p.text_input("Nome Giocatore:", "PLAYER").upper()
 p_time = col_m.text_input("Minuto:", "00:00")
 
-# --- TABS AZIONI ---
+# --- TABS ---
 tab_tiri, tab_extra = st.tabs(["🎯 Tiri", "📊 Altre Statistiche"])
 
 with tab_tiri:
@@ -89,15 +97,13 @@ with tab_tiri:
     is_tl = "TL" in esito
     cur_x, cur_y = (0, 142) if is_tl else (st.slider("X", -250, 250, 0, 10), st.slider("Y", -40, 420, 100, 10))
     
-    shots_to_plot = [s for s in st.session_state.shots if s['type'] in ['2PT', '3PT', 'TL']]
+    shots_to_plot = [s for s in st.session_state.shots if s.get('type') in ['2PT', '3PT', 'TL']]
     st.plotly_chart(create_basketball_court(cur_x, cur_y, shots_to_plot), use_container_width=True)
 
     if st.button("✅ REGISTRA TIRO", type="primary", use_container_width=True):
         s_type = "TL" if is_tl else get_shot_type(cur_x, cur_y)
         made = "Segnato" in esito
         pts = 1 if is_tl else (int(s_type[0]) if made else 0)
-        
-        # Salviamo anche chi era in campo per il +/-
         in_campo = [giocatori_dict[p] for p in quintetto] if quintetto else []
         
         st.session_state.shots.append({
@@ -119,8 +125,8 @@ with tab_extra:
 
     c1, c2, c3 = st.columns(3)
     if c1.button("🤝 Assist", use_container_width=True): registra_extra("AST")
-    if c2.button("🏀 Rimbalzo Off", use_container_width=True): registra_extra("OREB")
-    if c3.button("🛡️ Rimbalzo Dif", use_container_width=True): registra_extra("DREB")
+    if c2.button("🏀 Rimb. Off", use_container_width=True): registra_extra("OREB")
+    if c3.button("🛡️ Rimb. Dif", use_container_width=True): registra_extra("DREB")
     c4, c5, c6 = st.columns(3)
     if c4.button("❌ Palla Persa", use_container_width=True): registra_extra("TOV")
     if c5.button("🥷 Recuperata", use_container_width=True): registra_extra("STL")
@@ -131,23 +137,25 @@ with tab_extra:
             delete_last_shot(user_id)
             st.rerun()
 
-# --- BOX SCORE E CALCOLO +/- ---
+# --- BOX SCORE SICURO ---
 if st.session_state.shots:
     df = pd.DataFrame(st.session_state.shots)
     df_t = df[df['team'] == t_home]
     
     if not df_t.empty:
         st.divider()
-        st.subheader("👤 Box Score Individuale")
+        st.subheader("👤 Box Score")
         
         rows = []
-        # Calcolo +/-: Per ogni canestro segnato, i giocatori "on_court" prendono punti
         plus_minus_map = {p: 0 for p in df_t['player'].unique()}
-        for _, row in df.iterrows():
-            if row['punti'] > 0 and isinstance(row['on_court'], list):
-                for p_on in row['on_court']:
-                    if p_on in plus_minus_map:
-                        plus_minus_map[p_on] += row['punti'] if row['team'] == t_home else -row['punti']
+        
+        # Calcolo +/- con controllo colonna on_court
+        if 'on_court' in df.columns:
+            for _, row in df.iterrows():
+                if isinstance(row.get('on_court'), list) and row.get('punti', 0) > 0:
+                    for p_on in row['on_court']:
+                        if p_on in plus_minus_map:
+                            plus_minus_map[p_on] += row['punti'] if row['team'] == t_home else -row['punti']
 
         for player in df_t['player'].unique():
             p_df = df_t[df_t['player'] == player]
@@ -165,8 +173,3 @@ if st.session_state.shots:
             })
             
         st.dataframe(pd.DataFrame(rows).sort_values(by="PTS", ascending=False), use_container_width=True)
-
-        if st.sidebar.button("🚨 Reset Totale"):
-            st.session_state.shots = []
-            save_shots(user_id, [])
-            st.rerun()
