@@ -8,13 +8,9 @@ from court_graphics import create_basketball_court
 
 st.set_page_config(page_title="Scout Basket PRO", layout="wide")
 
-# 1. AUTENTICAZIONE
-if not check_password():
-    st.stop()
-
+if not check_password(): st.stop()
 user_id = st.session_state.get("username")
-if 'shots' not in st.session_state:
-    st.session_state.shots = load_shots(user_id)
+if 'shots' not in st.session_state: st.session_state.shots = load_shots(user_id)
 df_roster = load_roster(user_id)
 
 # --- SIDEBAR ---
@@ -26,7 +22,7 @@ if st.sidebar.button("Logout"):
 st.sidebar.divider()
 
 st.sidebar.subheader("📂 Importa Roster")
-up_file = st.sidebar.file_uploader("Carica .csv (colonne: nome, squadra)", type=["csv"])
+up_file = st.sidebar.file_uploader("Carica .csv (colonne: numero, nome, ruolo, squadra)", type=["csv"])
 if up_file:
     df_up = pd.read_csv(up_file)
     df_up.columns = [c.lower() for c in df_up.columns]
@@ -36,14 +32,20 @@ if up_file:
     st.sidebar.success("Roster caricato!")
     st.rerun()
 
-with st.sidebar.expander("➕ Aggiungi Giocatore Manuale"):
+with st.sidebar.expander("➕ Aggiungi Giocatore"):
     teams_db = sorted(df_roster['squadra'].unique().tolist()) if not df_roster.empty else []
     sq_in = st.selectbox("Squadra:", teams_db + ["+ NUOVA..."])
     final_sq = st.text_input("Nome Squadra:").upper() if sq_in == "+ NUOVA..." else sq_in
+    
+    c_num, c_ruolo = st.columns([1, 2])
+    new_num = c_num.text_input("N°:")
+    new_ruolo = c_ruolo.selectbox("Ruolo:", ["Playmaker (PG)", "Guardia (SG)", "Ala Piccola (SF)", "Ala Grande (PF)", "Centro (C)"])
     new_n = st.text_input("Nome Giocatore:").upper()
+    
     if st.button("Salva nel Roster"):
-        if new_n and final_sq:
-            save_player_to_roster(user_id, new_n, final_sq)
+        if new_n and final_sq and new_num:
+            r_sigla = new_ruolo.split("(")[1].replace(")", "") # Estrae PG, SG, ecc.
+            save_player_to_roster(user_id, new_num, new_n, r_sigla, final_sq)
             st.rerun()
 
 st.sidebar.divider()
@@ -61,22 +63,29 @@ t_home = c_top2.selectbox("Squadra Attiva:", teams_list) if teams_list else c_to
 
 st.divider()
 
-# Input Giocatore e Tempo
+# Preparazione Dropdown con Ricerca Rapida (Num - Nome)
+df_team = df_roster[df_roster['squadra'] == t_home].copy() if not df_roster.empty else pd.DataFrame()
+if not df_team.empty:
+    df_team['display'] = df_team['numero'].astype(str) + " - " + df_team['nome'] + " (" + df_team['ruolo'] + ")"
+    giocatori_dict = dict(zip(df_team['display'], df_team['nome'])) # Mappa la stringa visiva al nome reale
+    lista_dropdown = sorted(giocatori_dict.keys())
+else:
+    lista_dropdown, giocatori_dict = [], {}
+
+# Input
 col_p, col_m = st.columns([2, 1])
-giocatori = df_roster[df_roster['squadra'] == t_home]['nome'].tolist() if not df_roster.empty else []
-p_name = col_p.selectbox("Giocatore Selezionato:", sorted(giocatori)) if giocatori else col_p.text_input("Nome:", "PLAYER")
+p_display = col_p.selectbox("Giocatore (Cerca n° o nome):", lista_dropdown) if lista_dropdown else None
+p_name = giocatori_dict.get(p_display, col_p.text_input("Nome:", "PLAYER")) if p_display else col_p.text_input("Nome:", "PLAYER")
 p_time = col_m.text_input("Minuto:", "00:00")
 
-# --- PANNELLO REGISTRAZIONE AZIONI (TABS) ---
+# --- TABS ---
 tab_tiri, tab_extra = st.tabs(["🎯 Tiri", "📊 Altre Statistiche"])
 
-# TAB 1: TIRI
 with tab_tiri:
     esito = st.radio("Esito Tiro:", ["Segnato", "Errore", "TL Segnato", "TL Sbagliato"], horizontal=True)
     is_tl = "TL" in esito
     cur_x, cur_y = (0, 142) if is_tl else (st.slider("X", -250, 250, 0, 10), st.slider("Y", -40, 420, 100, 10))
     
-    # Filtra solo i tiri per il grafico
     shots_to_plot = [s for s in st.session_state.shots if s['type'] in ['2PT', '3PT', 'TL']]
     st.plotly_chart(create_basketball_court(cur_x, cur_y, shots_to_plot), use_container_width=True)
 
@@ -88,16 +97,13 @@ with tab_tiri:
         st.session_state.shots.append({"team": t_home, "player": p_name, "tempo": p_time, "x": cur_x, "y": cur_y, "made": made, "type": s_type, "punti": pts})
         save_shots(user_id, st.session_state.shots)
         st.rerun()
-    if b2.button("↩️ Undo", help="Elimina ultimo evento", key="undo_tiro"):
+    if b2.button("↩️ Undo", use_container_width=True):
         if st.session_state.shots:
             st.session_state.shots.pop()
             delete_last_shot(user_id)
             st.rerun()
 
-# TAB 2: ALTRE STATISTICHE E FALLI
 with tab_extra:
-    st.write(f"Registra azione per **{p_name}** al minuto **{p_time}**:")
-    
     def registra_extra(tipo_azione):
         st.session_state.shots.append({"team": t_home, "player": p_name, "tempo": p_time, "x": 0, "y": 0, "made": False, "type": tipo_azione, "punti": 0})
         save_shots(user_id, st.session_state.shots)
@@ -122,7 +128,7 @@ with tab_extra:
             delete_last_shot(user_id)
             st.rerun()
 
-# --- STATISTICHE E PLAY-BY-PLAY ---
+# --- STATISTICHE ---
 if st.session_state.shots:
     df = pd.DataFrame(st.session_state.shots)
     df_t = df[df['team'] == t_home]
@@ -131,30 +137,8 @@ if st.session_state.shots:
         st.divider()
         st.header(f"📊 Report {t_home}")
         
-        # 1. STATISTICHE TOTALI DI SQUADRA (Compresi i Falli)
-        st.subheader("🏢 Totali di Squadra")
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("PUNTI TOTALI", df_t['punti'].sum())
-        
-        def team_perc(shot_type):
-            sub = df_t[df_t['type'] == shot_type]
-            if sub.empty: return "0/0 (0%)"
-            m = sub['made'].sum()
-            t = len(sub)
-            return f"{m}/{t} ({(m/t*100):.1f}%)"
-
-        c2.metric("Tiri da 2", team_perc("2PT"))
-        c3.metric("Tiri da 3", team_perc("3PT"))
-        c4.metric("Tiri Liberi", team_perc("TL"))
-
-        c5, c6, c7, c8 = st.columns(4)
-        c5.metric("Assist Totali", len(df_t[df_t['type'] == 'AST']))
-        c6.metric("Rimbalzi (Off / Dif)", f"{len(df_t[df_t['type'] == 'OREB'])} / {len(df_t[df_t['type'] == 'DREB'])}")
-        c7.metric("Palle Perse / Rec", f"{len(df_t[df_t['type'] == 'TOV'])} / {len(df_t[df_t['type'] == 'STL'])}")
-        c8.metric("Falli (Commessi/Subiti)", f"{len(df_t[df_t['type'] == 'FC'])} / {len(df_t[df_t['type'] == 'FS'])}")
-        
-        # 2. BOX SCORE INDIVIDUALE (Compresi FC e FS)
-        st.subheader("👤 Box Score Individuale (Avanzato)")
+        # BOX SCORE INDIVIDUALE AGGIORNATO (Con N° e Ruolo)
+        st.subheader("👤 Box Score Individuale")
         def get_shot_ratio(player_df, shot_type):
             sub = player_df[player_df['type'] == shot_type]
             return f"{sub['made'].sum()}/{len(sub)}" if not sub.empty else "0/0"
@@ -162,6 +146,11 @@ if st.session_state.shots:
         rows = []
         for player in df_t['player'].unique():
             p_df = df_t[df_t['player'] == player]
+            
+            # Recupera n° e ruolo dal roster
+            info_roster = df_team[df_team['nome'] == player]
+            p_num = info_roster['numero'].values[0] if not info_roster.empty else "-"
+            p_ruolo = info_roster['ruolo'].values[0] if not info_roster.empty else "-"
             
             fga_df = p_df[p_df['type'].isin(['2PT', '3PT'])]
             fga = len(fga_df)
@@ -171,9 +160,10 @@ if st.session_state.shots:
             pts = p_df['punti'].sum()
             
             efg = ((fgm + 0.5 * fg3m) / fga * 100) if fga > 0 else 0
-            ts = (pts / (2 * (fga + 0.44 * fta)) * 100) if (fga + fta) > 0 else 0
             
             rows.append({
+                "N°": p_num,
+                "Ruolo": p_ruolo,
                 "Giocatore": player,
                 "PTS": pts,
                 "2PT": get_shot_ratio(p_df, "2PT"),
@@ -185,44 +175,10 @@ if st.session_state.shots:
                 "TOV": len(p_df[p_df['type'] == 'TOV']),
                 "BLK": len(p_df[p_df['type'] == 'BLK']),
                 "FC": len(p_df[p_df['type'] == 'FC']),
-                "FS": len(p_df[p_df['type'] == 'FS']),
-                "eFG%": f"{efg:.1f}%",
-                "TS%": f"{ts:.1f}%"
+                "eFG%": f"{efg:.1f}%"
             })
             
         st.dataframe(pd.DataFrame(rows).sort_values(by="PTS", ascending=False), use_container_width=True)
 
-        # 3. PLAY-BY-PLAY
-        st.subheader("📜 Play-by-Play")
-        pbp_data = []
-        for s in reversed(st.session_state.shots):
-            if s['team'] != t_home: continue # Mostra solo azioni della squadra attiva
-            
-            azione = ""
-            if s['type'] in ['2PT', '3PT', 'TL']:
-                azione = f"{s['type']} {'Segnato ✅' if s['made'] else 'Sbagliato ❌'}"
-            elif s['type'] == 'AST': azione = "Assist 🤝"
-            elif s['type'] == 'OREB': azione = "Rimbalzo Offensivo 🏀"
-            elif s['type'] == 'DREB': azione = "Rimbalzo Difensivo 🛡️"
-            elif s['type'] == 'TOV': azione = "Palla Persa ❌"
-            elif s['type'] == 'STL': azione = "Palla Recuperata 🥷"
-            elif s['type'] == 'BLK': azione = "Stoppata ⛔"
-            elif s['type'] == 'FC': azione = "Fallo Commesso 🛑"
-            elif s['type'] == 'FS': azione = "Fallo Subito 🤕"
-            
-            pbp_data.append({
-                "Min": s['tempo'],
-                "Giocatore": s['player'],
-                "Evento": azione,
-                "Pts": s['punti']
-            })
-        
-        st.dataframe(pd.DataFrame(pbp_data), use_container_width=True)
-
-        # DOWNLOADS
         d1, d2 = st.columns(2)
         d1.download_button("Scarica Dati Grezzi (CSV)", df.to_csv(index=False).encode('utf-8'), "scout_completo.csv", use_container_width=True)
-        try:
-            pdf_data = generate_player_report(df, t_home)
-            d2.download_button("Scarica Report (PDF)", pdf_data, "Report.pdf", "application/pdf", use_container_width=True)
-        except: pass
