@@ -76,7 +76,7 @@ with tab_tiri:
     is_tl = "TL" in esito
     cur_x, cur_y = (0, 142) if is_tl else (st.slider("X", -250, 250, 0, 10), st.slider("Y", -40, 420, 100, 10))
     
-    # Filtra solo i tiri per il grafico (ignora assist, rimbalzi, ecc.)
+    # Filtra solo i tiri per il grafico
     shots_to_plot = [s for s in st.session_state.shots if s['type'] in ['2PT', '3PT', 'TL']]
     st.plotly_chart(create_basketball_court(cur_x, cur_y, shots_to_plot), use_container_width=True)
 
@@ -94,9 +94,9 @@ with tab_tiri:
             delete_last_shot(user_id)
             st.rerun()
 
-# TAB 2: ALTRE STATISTICHE
+# TAB 2: ALTRE STATISTICHE E FALLI
 with tab_extra:
-    st.write(f"Registra un'azione per **{p_name}** al minuto **{p_time}**:")
+    st.write(f"Registra azione per **{p_name}** al minuto **{p_time}**:")
     
     def registra_extra(tipo_azione):
         st.session_state.shots.append({"team": t_home, "player": p_name, "tempo": p_time, "x": 0, "y": 0, "made": False, "type": tipo_azione, "punti": 0})
@@ -105,19 +105,24 @@ with tab_extra:
 
     ce1, ce2, ce3 = st.columns(3)
     if ce1.button("🤝 Assist", use_container_width=True): registra_extra("AST")
-    if ce2.button("🏀 Rimb. Offensivo", use_container_width=True): registra_extra("OREB")
-    if ce3.button("🛡️ Rimb. Difensivo", use_container_width=True): registra_extra("DREB")
+    if ce2.button("🏀 Rimb. Off", use_container_width=True): registra_extra("OREB")
+    if ce3.button("🛡️ Rimb. Dif", use_container_width=True): registra_extra("DREB")
     
     ce4, ce5, ce6 = st.columns(3)
     if ce4.button("❌ Palla Persa", use_container_width=True): registra_extra("TOV")
-    if ce5.button("🥷 Palla Recuperata", use_container_width=True): registra_extra("STL")
-    if ce6.button("↩️ Annulla Ultimo Evento", use_container_width=True):
+    if ce5.button("🥷 Recuperata", use_container_width=True): registra_extra("STL")
+    if ce6.button("⛔ Stoppata", use_container_width=True): registra_extra("BLK")
+
+    ce7, ce8, ce9 = st.columns(3)
+    if ce7.button("🛑 Fallo Commesso", use_container_width=True): registra_extra("FC")
+    if ce8.button("🤕 Fallo Subito", use_container_width=True): registra_extra("FS")
+    if ce9.button("↩️ Annulla Ultimo", use_container_width=True):
         if st.session_state.shots:
             st.session_state.shots.pop()
             delete_last_shot(user_id)
             st.rerun()
 
-# --- STATISTICHE & PLAY-BY-PLAY ---
+# --- STATISTICHE E PLAY-BY-PLAY ---
 if st.session_state.shots:
     df = pd.DataFrame(st.session_state.shots)
     df_t = df[df['team'] == t_home]
@@ -126,7 +131,29 @@ if st.session_state.shots:
         st.divider()
         st.header(f"📊 Report {t_home}")
         
-        # BOX SCORE COMPLETO (Avanzate + Extra)
+        # 1. STATISTICHE TOTALI DI SQUADRA (Compresi i Falli)
+        st.subheader("🏢 Totali di Squadra")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("PUNTI TOTALI", df_t['punti'].sum())
+        
+        def team_perc(shot_type):
+            sub = df_t[df_t['type'] == shot_type]
+            if sub.empty: return "0/0 (0%)"
+            m = sub['made'].sum()
+            t = len(sub)
+            return f"{m}/{t} ({(m/t*100):.1f}%)"
+
+        c2.metric("Tiri da 2", team_perc("2PT"))
+        c3.metric("Tiri da 3", team_perc("3PT"))
+        c4.metric("Tiri Liberi", team_perc("TL"))
+
+        c5, c6, c7, c8 = st.columns(4)
+        c5.metric("Assist Totali", len(df_t[df_t['type'] == 'AST']))
+        c6.metric("Rimbalzi (Off / Dif)", f"{len(df_t[df_t['type'] == 'OREB'])} / {len(df_t[df_t['type'] == 'DREB'])}")
+        c7.metric("Palle Perse / Rec", f"{len(df_t[df_t['type'] == 'TOV'])} / {len(df_t[df_t['type'] == 'STL'])}")
+        c8.metric("Falli (Commessi/Subiti)", f"{len(df_t[df_t['type'] == 'FC'])} / {len(df_t[df_t['type'] == 'FS'])}")
+        
+        # 2. BOX SCORE INDIVIDUALE (Compresi FC e FS)
         st.subheader("👤 Box Score Individuale (Avanzato)")
         def get_shot_ratio(player_df, shot_type):
             sub = player_df[player_df['type'] == shot_type]
@@ -136,7 +163,6 @@ if st.session_state.shots:
         for player in df_t['player'].unique():
             p_df = df_t[df_t['player'] == player]
             
-            # Calcoli Avanzati
             fga_df = p_df[p_df['type'].isin(['2PT', '3PT'])]
             fga = len(fga_df)
             fgm = fga_df['made'].sum()
@@ -157,17 +183,21 @@ if st.session_state.shots:
                 "AST": len(p_df[p_df['type'] == 'AST']),
                 "STL": len(p_df[p_df['type'] == 'STL']),
                 "TOV": len(p_df[p_df['type'] == 'TOV']),
+                "BLK": len(p_df[p_df['type'] == 'BLK']),
+                "FC": len(p_df[p_df['type'] == 'FC']),
+                "FS": len(p_df[p_df['type'] == 'FS']),
                 "eFG%": f"{efg:.1f}%",
                 "TS%": f"{ts:.1f}%"
             })
             
         st.dataframe(pd.DataFrame(rows).sort_values(by="PTS", ascending=False), use_container_width=True)
 
-        # PLAY-BY-PLAY
+        # 3. PLAY-BY-PLAY
         st.subheader("📜 Play-by-Play")
         pbp_data = []
-        # Ciclo al contrario per vedere prima le azioni più recenti
         for s in reversed(st.session_state.shots):
+            if s['team'] != t_home: continue # Mostra solo azioni della squadra attiva
+            
             azione = ""
             if s['type'] in ['2PT', '3PT', 'TL']:
                 azione = f"{s['type']} {'Segnato ✅' if s['made'] else 'Sbagliato ❌'}"
@@ -176,16 +206,17 @@ if st.session_state.shots:
             elif s['type'] == 'DREB': azione = "Rimbalzo Difensivo 🛡️"
             elif s['type'] == 'TOV': azione = "Palla Persa ❌"
             elif s['type'] == 'STL': azione = "Palla Recuperata 🥷"
+            elif s['type'] == 'BLK': azione = "Stoppata ⛔"
+            elif s['type'] == 'FC': azione = "Fallo Commesso 🛑"
+            elif s['type'] == 'FS': azione = "Fallo Subito 🤕"
             
             pbp_data.append({
                 "Min": s['tempo'],
-                "Squadra": s['team'],
                 "Giocatore": s['player'],
                 "Evento": azione,
                 "Pts": s['punti']
             })
         
-        # Mostra il Play-by-Play in una tabella elegante
         st.dataframe(pd.DataFrame(pbp_data), use_container_width=True)
 
         # DOWNLOADS
