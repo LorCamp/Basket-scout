@@ -1,41 +1,48 @@
 import streamlit as st
 import pandas as pd
-from streamlit_gsheets import GSheetsConnection
+from st_supabase_connection import SupabaseConnection
 
 def get_conn():
-    # Sostituisce il caricamento da file locale con la connessione Google
-    return st.connection("gsheets", type=GSheetsConnection)
+    return st.connection("supabase", type=SupabaseConnection)
 
 def load_shots(user_id):
-    """Carica i dati dal foglio Google"""
+    """Carica solo i tiri dell'utente loggato da Supabase"""
     try:
         conn = get_conn()
-        # Legge il foglio 'Shots'. Assicurati che il foglio esista!
-        df = conn.read(spreadsheet=st.secrets["public_gsheets_url"], ttl=0)
-        if df is None or df.empty:
-            return []
-        return df.to_dict('records')
+        # Query: Seleziona tutto dalla tabella 'shots' dove user_id è uguale a...
+        res = conn.query("*", table="shots", ttl=0).eq("user_id", user_id).execute()
+        if res.data:
+            return res.data
+        return []
     except Exception as e:
         return []
 
 def save_shots(user_id, shots_list):
-    """Salva i dati sul foglio Google"""
+    """Salva SOLO l'ultima azione aggiunta (molto più veloce!)"""
     if not shots_list:
         return
     try:
         conn = get_conn()
-        df = pd.DataFrame(shots_list)
-        # Sovrascrive il foglio Google con la lista aggiornata
-        conn.update(spreadsheet=st.secrets["public_gsheets_url"], data=df)
+        # Prendiamo l'ultimo elemento della lista (l'azione appena fatta)
+        last_shot = shots_list[-1]
+        last_shot["user_id"] = user_id # Colleghiamo l'azione all'utente
+        
+        # Inseriamo la riga nel database
+        conn.table("shots").insert(last_shot).execute()
     except Exception as e:
-        st.error(f"Errore nel salvataggio su Google Sheets: {e}")
+        st.error(f"Errore database: {e}")
 
 def delete_last_shot(user_id):
-    """Rimuove l'ultima riga dal database Google"""
-    shots = load_shots(user_id)
-    if shots:
-        shots.pop()
-        save_shots(user_id, shots)
+    """Elimina l'ultima riga inserita da questo utente"""
+    try:
+        conn = get_conn()
+        # Cerchiamo l'ID più alto dell'utente e lo eliminiamo
+        res = conn.table("shots").select("id").eq("user_id", user_id).order("id", desc=True).limit(1).execute()
+        if res.data:
+            shot_id = res.data[0]['id']
+            conn.table("shots").delete().eq("id", shot_id).execute()
+    except Exception:
+        pass
 
 def get_shot_type(x, y):
     """Logica per determinare se il tiro è da 2 o 3 punti"""
