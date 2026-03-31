@@ -18,6 +18,14 @@ df_roster = load_roster(user_id)
 st.sidebar.title(f"🏀 Coach: {user_id}")
 tipo_sessione = st.sidebar.radio("MODALITÀ:", ["Partita 🏟️", "Allenamento 🏃‍♂️"])
 
+# 4. TASTO LOGOUT
+if st.sidebar.button("🚪 Logout", use_container_width=True):
+    # Cancelliamo tutto lo stato della sessione
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.rerun()
+
+# 3. RESET DATI (cancella roster)
 if st.sidebar.button("🚨 RESET DATI", type="primary", use_container_width=True):
     st.session_state.shots = []
     save_shots(user_id, [])
@@ -40,7 +48,7 @@ if st.session_state.shots:
 
 with st.sidebar.expander("📂 Gestione Roster"):
     # 1. CARICAMENTO CSV (Opzionale)
-    up_file = st.file_uploader("Carica CSV LBA", type=["csv"])
+    up_file = st.file_uploader("Carica Roster CSV", type=["csv"])
     if up_file:
         df_up = pd.read_csv(up_file)
         df_up.columns = [c.lower() for c in df_up.columns]
@@ -57,7 +65,7 @@ with st.sidebar.expander("📂 Gestione Roster"):
         st.rerun()
     st.divider()
     
-    # 2. INSERIMENTO MANUALE (Quello che mancava nella foto)
+    # 2. INSERIMENTO MANUALE
     st.subheader("Aggiungi Giocatore")
     teams_db = sorted(df_roster['squadra'].unique().tolist()) if not df_roster.empty else []
     sq_in = st.selectbox("Squadra:", teams_db + ["+ NUOVA..."])
@@ -70,10 +78,29 @@ with st.sidebar.expander("📂 Gestione Roster"):
     
     if st.button("Salva nel Database Cloud", use_container_width=True):
         if n_nome and final_sq and n_num:
-            success = save_player_to_roster(user_id, n_num, n_nome, n_ruolo, final_sq)
+            success = save_play# 3. RESET DATI (cancella roster)
+if st.sidebar.button("🚨 RESET DATI", type="primary", use_container_width=True):
+    st.session_state.shots = []
+    save_shots(user_id, [])
+    st.rerun()er_to_roster(user_id, n_num, n_nome, n_ruolo, final_sq)
             if success:
                 st.toast("Giocatore salvato!", icon="✅")
                 st.rerun()
+                
+st.sidebar.divider()
+
+# 3. RESET DATI (cancella roster)
+if st.sidebar.button("🚨 RESET DATI", type="primary", use_container_width=True):
+    st.session_state.shots = []
+    save_shots(user_id, [])
+    st.rerun()
+# 4. TASTO LOGOUT
+if st.sidebar.button("🚪 Logout", use_container_width=True):
+    # Cancelliamo tutto lo stato della sessione
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.rerun()
+    
 # --- HEADER & PUNTEGGIO ---
 st.title(f"🏀 {tipo_sessione}")
 all_teams = sorted(df_roster['squadra'].unique().tolist()) if not df_roster.empty else []
