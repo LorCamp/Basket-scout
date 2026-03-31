@@ -3,8 +3,13 @@ import pandas as pd
 from st_supabase_connection import SupabaseConnection
 
 def get_conn():
-    # Si collega a Supabase usando i Secrets [connections.supabase]
-    return st.connection("supabase", type=SupabaseConnection)
+    # Proviamo a passare i parametri esplicitamente dai Secrets
+    return st.connection(
+        "supabase", 
+        type=SupabaseConnection,
+        url=st.secrets["connections"]["supabase"]["url"],
+        key=st.secrets["connections"]["supabase"]["key"]
+    )
 
 # --- GESTIONE TIRI (Tabella 'shots') ---
 
