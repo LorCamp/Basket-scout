@@ -3,67 +3,75 @@ import pandas as pd
 from st_supabase_connection import SupabaseConnection
 
 def get_conn():
+    # Si collega a Supabase usando i Secrets [connections.supabase]
     return st.connection("supabase", type=SupabaseConnection)
 
+# --- GESTIONE TIRI (Tabella 'shots') ---
+
 def load_shots(user_id):
-    """Carica solo i tiri dell'utente loggato da Supabase"""
+    """Carica i tiri dell'utente dal database"""
     try:
-        conn = st.connection("supabase", type=SupabaseConnection)
-        # IL FILTRO .eq È FONDAMENTALE PER ATTIVARE LA POLICY CORRETTAMENTE
+        conn = get_conn()
         res = conn.table("shots").select("*").eq("user_id", user_id).execute()
         return res.data if res.data else []
     except Exception:
         return []
 
 def save_shots(user_id, shots_list):
-    """Salva SOLO l'ultima azione aggiunta (molto più veloce!)"""
+    """Salva l'ultima azione registrata"""
     if not shots_list:
         return
     try:
         conn = get_conn()
-        # Prendiamo l'ultimo elemento della lista (l'azione appena fatta)
         last_shot = shots_list[-1]
-        last_shot["user_id"] = user_id # Colleghiamo l'azione all'utente
-        
-        # Inseriamo la riga nel database
+        last_shot["user_id"] = user_id
+        # Inserisce la riga singola (molto più efficiente)
         conn.table("shots").insert(last_shot).execute()
     except Exception as e:
-        st.error(f"Errore database: {e}")
+        st.error(f"Errore salvataggio tiro: {e}")
 
 def delete_last_shot(user_id):
-    """Elimina l'ultima riga inserita da questo utente"""
+    """Cancella l'ultima azione dell'utente (per il tasto Undo)"""
     try:
         conn = get_conn()
-        # Cerchiamo l'ID più alto dell'utente e lo eliminiamo
         res = conn.table("shots").select("id").eq("user_id", user_id).order("id", desc=True).limit(1).execute()
         if res.data:
-            shot_id = res.data[0]['id']
-            conn.table("shots").delete().eq("id", shot_id).execute()
+            conn.table("shots").delete().eq("id", res.data[0]['id']).execute()
     except Exception:
         pass
 
-def get_shot_type(x, y):
-    """Logica per determinare se il tiro è da 2 o 3 punti"""
-    import math
-    dist = math.sqrt(x**2 + y**2)
-    # 6.75 metri è la distanza FIBA (scala circa 238 unità nel grafico)
-    if dist > 238:
-        return "3PT"
-    return "2PT"
+# --- GESTIONE ROSTER (Tabella 'roster') ---
 
 def load_roster(user_id):
-    """Carica il roster da file locale (o puoi portarlo su Sheets in futuro)"""
-    import os
-    path = f"data_users/{user_id}/roster.csv"
-    if os.path.exists(path):
-        return pd.read_csv(path)
-    return pd.DataFrame(columns=['numero', 'nome', 'ruolo', 'squadra'])
+    """Carica i giocatori dell'utente dal database"""
+    try:
+        conn = get_conn()
+        res = conn.table("roster").select("*").eq("user_id", user_id).execute()
+        if res.data:
+            return pd.DataFrame(res.data)
+        return pd.DataFrame(columns=['numero', 'nome', 'ruolo', 'squadra'])
+    except Exception:
+        return pd.DataFrame(columns=['numero', 'nome', 'ruolo', 'squadra'])
 
 def save_player_to_roster(user_id, numero, nome, ruolo, squadra):
-    import os
-    path = f"data_users/{user_id}/roster.csv"
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    new_p = pd.DataFrame([[numero, nome, ruolo, squadra]], columns=['numero', 'nome', 'ruolo', 'squadra'])
-    df = load_roster(user_id)
-    df = pd.concat([df, new_p], ignore_index=True)
-    df.to_csv(path, index=False)
+    """Aggiunge un giocatore al database cloud"""
+    try:
+        conn = get_conn()
+        player_data = {
+            "user_id": user_id,
+            "numero": str(numero),
+            "nome": nome.upper(),
+            "ruolo": ruolo,
+            "squadra": squadra.upper()
+        }
+        conn.table("roster").insert(player_data).execute()
+        return True
+    except Exception as e:
+        st.error(f"Errore salvataggio giocatore: {e}")
+        return False
+
+def get_shot_type(x, y):
+    """Logica distanza tiro (scala FIBA)"""
+    import math
+    dist = math.sqrt(x**2 + y**2)
+    return "3PT" if dist > 238 else "2PT"
