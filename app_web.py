@@ -2,8 +2,9 @@ import streamlit as st
 import pandas as pd
 from engine import (
     load_shots, save_shots, delete_last_shot, 
-    load_roster, save_player_to_roster, get_shot_type, generate_pdf_report
+    load_roster, save_player_to_roster, get_shot_type
 )
+from reports import generate_player_report
 # Assicurati di avere anche il tuo file auth.py per la funzione check_password
 from auth import check_password
 
