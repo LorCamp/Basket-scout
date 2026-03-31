@@ -1,220 +1,155 @@
 import streamlit as st
 import pandas as pd
-import os
+from engine import (
+    load_shots, save_shots, delete_last_shot, 
+    load_roster, save_player_to_roster, get_shot_type, generate_pdf_report
+)
+# Assicurati di avere anche il tuo file auth.py per la funzione check_password
 from auth import check_password
-from engine import get_shot_type, save_shots, load_shots, load_roster, save_player_to_roster, delete_last_shot
-from court_graphics import create_basketball_court
 
-st.set_page_config(page_title="Scout Basket PRO 2026", layout="wide")
+# 1. Configurazione Pagina
+st.set_page_config(page_title="Scout Basket PRO", layout="wide", page_icon="🏀")
 
-if not check_password(): st.stop()
+# 2. Controllo Accesso
+if not check_password():
+    st.stop()
 
-user_id = st.session_state.get("username")
-if 'shots' not in st.session_state:
+# 3. Inizializzazione Variabili di Sessione
+user_id = st.session_state.username
+
+if "shots" not in st.session_state:
+    # Carichiamo i tiri dal Cloud Supabase all'avvio
     st.session_state.shots = load_shots(user_id)
+
+# Carichiamo il roster dal Cloud
 df_roster = load_roster(user_id)
 
 # --- SIDEBAR ---
-st.sidebar.title(f"🏀 Coach: {user_id}")
-tipo_sessione = st.sidebar.radio("MODALITÀ:", ["Partita 🏟️", "Allenamento 🏃‍♂️"])
-
-# 4. TASTO LOGOUT
-if st.sidebar.button("🚪 Logout", use_container_width=True):
-    # Cancelliamo tutto lo stato della sessione
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    st.rerun()
-
-# 3. RESET DATI (cancella roster)
-if st.sidebar.button("🚨 RESET DATI", type="primary", use_container_width=True):
-    st.session_state.shots = []
-    save_shots(user_id, [])
-    st.rerun()
-
-st.sidebar.divider()
-
-# --- EXPORT REPORT ---
-if st.session_state.shots:
-    st.sidebar.subheader("📊 Report Finale")
-    df_export = pd.DataFrame(st.session_state.shots)
-    csv = df_export.to_csv(index=False).encode('utf-8')
-    st.sidebar.download_button(
-        label="📥 Scarica Box Score (CSV)",
-        data=csv,
-        file_name=f"report_{tipo_sessione}_{user_id}.csv",
-        mime='text/csv',
-        use_container_width=True
-    )
-
-with st.sidebar.expander("📂 Gestione Roster"):
-    # 1. CARICAMENTO CSV (Opzionale)
-    up_file = st.file_uploader("Carica Roster CSV", type=["csv"])
-    if up_file:
-        df_up = pd.read_csv(up_file)
-        df_up.columns = [c.lower() for c in df_up.columns]
-        # Ciclo per caricare ogni riga del CSV su Supabase
-        for _, row in df_up.iterrows():
-            save_player_to_roster(
-                user_id, 
-                row.get('numero', '0'), 
-                row.get('nome', 'Sconosciuto'), 
-                row.get('ruolo', '-'), 
-                row.get('squadra', 'MIA SQUADRA')
-            )
-        st.success("Roster caricato su Cloud!")
-        st.rerun()
+with st.sidebar:
+    st.title(f"🏀 Coach: {user_id}")
+    
+    modalita = st.radio("MODALITÀ:", ["Partita 🏟️", "Allenamento 🏃‍♂️"])
+    
     st.divider()
-    
-    # 2. INSERIMENTO MANUALE
-    st.subheader("Aggiungi Giocatore")
-    teams_db = sorted(df_roster['squadra'].unique().tolist()) if not df_roster.empty else []
-    sq_in = st.selectbox("Squadra:", teams_db + ["+ NUOVA..."])
-    final_sq = st.text_input("Nome Team:").upper() if sq_in == "+ NUOVA..." else sq_in
-    
-    c_n, c_r = st.columns([1, 2])
-    n_num = c_n.text_input("N°:")
-    n_ruolo = c_r.selectbox("Ruolo:", ["PG", "SG", "SF", "PF", "C"])
-    n_nome = st.text_input("Cognome Nome:").upper()
-    
-    if st.button("Salva nel Database Cloud", use_container_width=True):
-        if n_nome and final_sq and n_num:
-            success = save_play# 3. RESET DATI (cancella roster)
-if st.sidebar.button("🚨 RESET DATI", type="primary", use_container_width=True):
-    st.session_state.shots = []
-    save_shots(user_id, [])
-    st.rerun()er_to_roster(user_id, n_num, n_nome, n_ruolo, final_sq)
-            if success:
-                st.toast("Giocatore salvato!", icon="✅")
-                st.rerun()
+
+    # EXPANDER: GESTIONE ROSTER
+    with st.expander("📂 Gestione Roster"):
+        
+        # --- SEZIONE 1: CARICAMENTO MASSIVO DA CSV ---
+        st.subheader("Carica da File")
+        up_file = st.file_uploader("Trascina qui il CSV della squadra", type=["csv"])
+        
+        if up_file:
+            try:
+                # Leggiamo il file caricato
+                df_import = pd.read_csv(up_file)
+                # Rendiamo i nomi delle colonne minuscoli per evitare errori (es. Nome -> nome)
+                df_import.columns = [c.lower().strip() for c in df_import.columns]
                 
-st.sidebar.divider()
+                if st.button("Conferma Importazione Cloud"):
+                    count = 0
+                    with st.spinner("Salvataggio in corso..."):
+                        for _, row in df_import.iterrows():
+                            # Mappiamo i campi del CSV con le colonne del tuo DB
+                            success = save_player_to_roster(
+                                user_id, 
+                                str(row.get('numero', '0')), 
+                                str(row.get('nome', 'Sconosciuto')).upper(), 
+                                str(row.get('ruolo', '-')).upper(), 
+                                str(row.get('squadra', 'MIA SQUADRA')).upper()
+                            )
+                            if success: count += 1
+                    
+                    st.success(f"Caricati {count} giocatori su Supabase!")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Errore nel file CSV: {e}")
 
-# 3. RESET DATI (cancella roster)
-if st.sidebar.button("🚨 RESET DATI", type="primary", use_container_width=True):
-    st.session_state.shots = []
-    save_shots(user_id, [])
-    st.rerun()
-# 4. TASTO LOGOUT
-if st.sidebar.button("🚪 Logout", use_container_width=True):
-    # Cancelliamo tutto lo stato della sessione
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    st.rerun()
-    
-# --- HEADER & PUNTEGGIO ---
-st.title(f"🏀 {tipo_sessione}")
-all_teams = sorted(df_roster['squadra'].unique().tolist()) if not df_roster.empty else []
-
-if tipo_sessione == "Partita 🏟️":
-    c_s1, c_s2, c_s3 = st.columns([2, 1, 2])
-    t_home = c_s1.selectbox("Tua Squadra:", all_teams, key="h_sel") if all_teams else c_s1.text_input("Tua Squadra:", "HOME").upper()
-    away_opts = [t for t in all_teams if t != t_home]
-    t_away_sel = c_s3.selectbox("Avversari:", away_opts + ["+ ALTRA..."], key="a_sel")
-    t_away = c_s3.text_input("Nome Avversario:", "AVVERSARI").upper() if t_away_sel == "+ ALTRA..." else t_away_sel
-    
-    df_all = pd.DataFrame(st.session_state.shots) if st.session_state.shots else pd.DataFrame()
-    pts_h = df_all[df_all['team'] == t_home]['punti'].sum() if not df_all.empty else 0
-    pts_a = df_all[df_all['team'] == "AVVERSARI"]['punti'].sum() if not df_all.empty else 0
-    c_s2.markdown(f"<h1 style='text-align: center; color: #FF4B4B;'>{pts_h}-{pts_a}</h1>", unsafe_allow_html=True)
-else:
-    t_home = st.selectbox("Squadra in Allenamento:", all_teams) if all_teams else st.text_input("Squadra:", "TEAM").upper()
-    t_away = "N/A"
-
-st.divider()
-
-# --- SELEZIONE GIOCATORE ---
-df_team = df_roster[df_roster['squadra'] == t_home].copy() if not df_roster.empty else pd.DataFrame()
-if not df_team.empty:
-    df_team['display'] = df_team['numero'].astype(str) + " - " + df_team['nome'] + " (" + df_team['ruolo'] + ")"
-    giocatori_dict = dict(zip(df_team['display'], df_team['nome']))
-    lista_giocatori = sorted(giocatori_dict.keys())
-else:
-    lista_giocatori, giocatori_dict = [], {}
-
-cols = st.columns([1.5, 1.5, 1])
-if tipo_sessione == "Partita 🏟️":
-    quintetto = cols[0].multiselect("5 in Campo:", lista_giocatori, max_selections=5)
-else:
-    cols[0].info("Modalità Allenamento: +/- disattivato")
-    quintetto = []
-
-p_name = giocatori_dict.get(cols[1].selectbox("Giocatore:", lista_giocatori))
-p_time = cols[2].text_input("Minuto/Note:", "00:00")
-
-# --- AZIONI ---
-tabs = ["🎯 Tiri", "📊 Stats Extra"]
-if tipo_sessione == "Partita 🏟️": tabs.append("🚩 Avversari")
-t_list = st.tabs(tabs)
-
-with t_list[0]:
-    esito = st.radio("Esito:", ["Segnato", "Errore", "TL Segnato", "TL Sbagliato"], horizontal=True)
-    is_tl = "TL" in esito
-    cur_x, cur_y = (0, 142) if is_tl else (st.slider("X", -250, 250, 0, 10), st.slider("Y", -40, 420, 100, 10))
-    s_plot = [s for s in st.session_state.shots if s.get('team') == t_home and s.get('type') in ['2PT', '3PT', 'TL']]
-    st.plotly_chart(create_basketball_court(cur_x, cur_y, s_plot), use_container_width=True)
-
-    if st.button("✅ REGISTRA TIRO", type="primary", use_container_width=True):
-        s_type = "TL" if is_tl else get_shot_type(cur_x, cur_y)
-        made = "Segnato" in esito
-        pts = 1 if is_tl else (int(s_type[0]) if made else 0)
-        in_campo = [giocatori_dict[p] for p in quintetto]
-        st.session_state.shots.append({"team": t_home, "player": p_name, "tempo": p_time, "x": cur_x, "y": cur_y, "made": made, "type": s_type, "punti": pts, "on_court": in_campo})
-        save_shots(user_id, st.session_state.shots); st.rerun()
-
-with t_list[1]:
-    def reg_e(tipo):
-        in_campo = [giocatori_dict[p] for p in quintetto]
-        st.session_state.shots.append({"team": t_home, "player": p_name, "tempo": p_time, "x": 0, "y": 0, "made": False, "type": tipo, "punti": 0, "on_court": in_campo})
-        save_shots(user_id, st.session_state.shots); st.rerun()
-    c1, c2, c3 = st.columns(3)
-    if c1.button("🤝 Assist"): reg_e("AST")
-    if c2.button("🏀 Rimb. Off"): reg_e("OREB")
-    if c3.button("🛡️ Rimb. Dif"): reg_e("DREB")
-    if st.button("↩️ Undo", use_container_width=True):
-        if st.session_state.shots: st.session_state.shots.pop(); delete_last_shot(user_id); st.rerun()
-
-if tipo_sessione == "Partita 🏟️":
-    with t_list[2]:
-        st.subheader(f"Punti subiti da {t_away}")
-        ca1, ca2, ca3 = st.columns(3)
-        def reg_o(p):
-            in_campo = [giocatori_dict[p] for p in quintetto]
-            st.session_state.shots.append({"team": "AVVERSARI", "player": "OPP", "tempo": p_time, "x": 0, "y": 0, "made": True, "type": "OPP_PTS", "punti": p, "on_court": in_campo})
-            save_shots(user_id, st.session_state.shots); st.rerun()
-        if ca1.button("+1 Libero"): reg_o(1)
-        if ca2.button("+2 Canestro"): reg_o(2)
-        if ca3.button("+3 Tripla"): reg_o(3)
-
-# --- BOX SCORE ---
-if st.session_state.shots:
-    df_all = pd.DataFrame(st.session_state.shots)
-    df_t = df_all[df_all['team'] == t_home]
-    if not df_t.empty:
         st.divider()
-        st.subheader("📊 Box Score")
-        rows = []
-        pm_map = {p: 0 for p in df_t['player'].unique()}
-        if 'on_court' in df_all.columns:
-            for _, r in df_all.iterrows():
-                if isinstance(r.get('on_court'), list) and r.get('punti', 0) > 0:
-                    for p_on in r['on_court']:
-                        if p_on in pm_map: pm_map[p_on] += r['punti'] if r['team'] == t_home else -r['punti']
 
-        for p in df_t['player'].unique():
-            p_df = df_t[df_t['player'] == p]
-            info = df_team[df_team['nome'] == p]
-            fga = len(p_df[p_df['type'].isin(['2PT', '3PT'])])
-            fgm = p_df[p_df['type'].isin(['2PT', '3PT'])]['made'].sum()
-            fg3m = p_df[(p_df['type'] == '3PT') & (p_df['made'] == True)]['made'].count()
-            efg = ((fgm + 0.5 * fg3m) / fga * 100) if fga > 0 else 0
-            rows.append({
-                "N°": info['numero'].values[0] if not info.empty else "-",
-                "Giocatore": p, "PTS": p_df['punti'].sum(),
-                "2PT": f"{p_df[p_df['type']=='2PT']['made'].sum()}/{len(p_df[p_df['type']=='2PT'])}",
-                "3PT": f"{p_df[p_df['type']=='3PT']['made'].sum()}/{len(p_df[p_df['type']=='3PT'])}",
-                "REB": len(p_df[p_df['type'].isin(['OREB', 'DREB'])]),
-                "AST": len(p_df[p_df['type'] == "AST"]),
-                "+/-": pm_map.get(p, 0) if tipo_sessione == "Partita 🏟️" else "-",
-                "eFG%": f"{efg:.1f}%"
-            })
-        st.dataframe(pd.DataFrame(rows).sort_values(by="PTS", ascending=False), use_container_width=True)
+        # --- SEZIONE 2: AGGIUNTA MANUALE ---
+        st.subheader("Aggiunta Singola")
+        c1, c2 = st.columns([1, 2])
+        n_num = c1.text_input("N°", key="manual_num")
+        n_ruolo = c2.selectbox("Ruolo", ["PG", "SG", "SF", "PF", "C"], key="manual_role")
+        n_nome = st.text_input("Cognome Nome", key="manual_name").upper()
+        n_sq = st.text_input("Squadra", key="manual_sq").upper()
+
+        if st.button("Salva Singolo", use_container_width=True):
+            if n_nome and n_num:
+                if save_player_to_roster(user_id, n_num, n_nome, n_ruolo, n_sq):
+                    st.toast(f"Giocatore {n_nome} salvato!")
+                    st.rerun()
+
+    st.divider()
+
+    # TASTO LOGOUT
+    if st.button("🚪 Logout", type="primary", use_container_width=True):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
+
+# --- CORPO CENTRALE ---
+st.title("Tabellone Scouting")
+
+# Esempio di interfaccia rapida per inserire tiri
+col_sx, col_dx = st.columns([2, 1])
+
+with col_sx:
+    st.subheader("Campo di Gioco")
+    # Qui andrebbe la tua logica Plotly per il campo
+    st.info("Clicca sul campo per registrare un tiro (Logica in court_graphics.py)")
+    
+    # Esempio tasto rapido per testare il salvataggio
+    if st.button("Simula Tiro Segnato (2PT)"):
+        nuovo_tiro = {
+            "user_id": user_id,
+            "player": "TEST PLAYER",
+            "x": 100.0,
+            "y": 150.0,
+            "made": True,
+            "type": "2PT",
+            "punti": 2
+        }
+        st.session_state.shots.append(nuovo_tiro)
+        save_shots(user_id, st.session_state.shots)
+        st.toast("Tiro salvato su Supabase!")
+
+with col_dx:
+    st.subheader("Box Score Live")
+    if st.session_state.shots:
+        df_display = pd.DataFrame(st.session_state.shots)
+        st.dataframe(df_display[['player', 'type', 'punti', 'made']], use_container_width=True)
+        
+        if st.button("⬅️ Annulla Ultimo (Undo)"):
+            delete_last_shot(user_id)
+            st.session_state.shots = load_shots(user_id)
+            st.rerun()
+    else:
+        st.write("Nessun tiro registrato.")
+
+# --- SEZIONE REPORT ---
+st.divider()
+st.subheader("📊 Analisi & Export")
+
+if st.session_state.shots:
+    # Preparazione dati per il PDF
+    # Trasformiamo la lista di tiri (da Supabase) in un DataFrame per la funzione PDF
+    df_report = pd.DataFrame(st.session_state.shots)
+    
+    # Chiamata alla funzione che avevamo creato (assicurati che sia in engine.py)
+    try:
+        pdf_bytes = generate_pdf_report(user_id, st.session_state.shots)
+        
+        st.download_button(
+            label="📥 SCARICA REPORT PDF",
+            data=pdf_bytes,
+            file_name=f"scout_{user_id}_partita.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+            type="secondary"
+        )
+    except Exception as e:
+        st.error(f"Errore generazione PDF: {e}")
+else:
+    st.info("Nessun dato disponibile per il PDF. Registra un tiro!")
