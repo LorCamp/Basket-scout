@@ -1,11 +1,10 @@
 import streamlit as st
 import pandas as pd
-# Assicurati che i nomi qui corrispondano esattamente a quelli nel tuo engine.py
 from engine import (
     load_shots, save_shots, delete_last_shot, 
-    load_roster, save_player_to_roster, get_shot_type,
-    generate_player_report # La tua funzione PDF
+    load_roster, save_player_to_roster, get_shot_type
 )
+from reports import generate_player_report
 from auth import check_password
 
 # 1. Configurazione
