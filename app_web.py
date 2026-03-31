@@ -19,6 +19,8 @@ if not check_password():
 user_id = st.session_state.get("username")
 
 # 3. INIZIALIZZAZIONE DATI
+all_teams = []
+df_roster = pd.DataFrame()
 if 'shots' not in st.session_state:
     st.session_state.shots = load_shots(user_id)
 
