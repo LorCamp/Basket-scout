@@ -39,13 +39,41 @@ if st.session_state.shots:
     )
 
 with st.sidebar.expander("📂 Gestione Roster"):
-    up_file = st.sidebar.file_uploader("Carica CSV", type=["csv"])
+    # 1. CARICAMENTO CSV (Opzionale)
+    up_file = st.file_uploader("Carica CSV LBA", type=["csv"])
     if up_file:
         df_up = pd.read_csv(up_file)
         df_up.columns = [c.lower() for c in df_up.columns]
-        df_up.to_csv(f"data_users/{user_id}/roster.csv", index=False)
+        # Ciclo per caricare ogni riga del CSV su Supabase
+        for _, row in df_up.iterrows():
+            save_player_to_roster(
+                user_id, 
+                row.get('numero', '0'), 
+                row.get('nome', 'Sconosciuto'), 
+                row.get('ruolo', '-'), 
+                row.get('squadra', 'MIA SQUADRA')
+            )
+        st.success("Roster caricato su Cloud!")
         st.rerun()
-
+    st.divider()
+    
+    # 2. INSERIMENTO MANUALE (Quello che mancava nella foto)
+    st.subheader("Aggiungi Giocatore")
+    teams_db = sorted(df_roster['squadra'].unique().tolist()) if not df_roster.empty else []
+    sq_in = st.selectbox("Squadra:", teams_db + ["+ NUOVA..."])
+    final_sq = st.text_input("Nome Team:").upper() if sq_in == "+ NUOVA..." else sq_in
+    
+    c_n, c_r = st.columns([1, 2])
+    n_num = c_n.text_input("N°:")
+    n_ruolo = c_r.selectbox("Ruolo:", ["PG", "SG", "SF", "PF", "C"])
+    n_nome = st.text_input("Cognome Nome:").upper()
+    
+    if st.button("Salva nel Database Cloud", use_container_width=True):
+        if n_nome and final_sq and n_num:
+            success = save_player_to_roster(user_id, n_num, n_nome, n_ruolo, final_sq)
+            if success:
+                st.toast("Giocatore salvato!", icon="✅")
+                st.rerun()
 # --- HEADER & PUNTEGGIO ---
 st.title(f"🏀 {tipo_sessione}")
 all_teams = sorted(df_roster['squadra'].unique().tolist()) if not df_roster.empty else []
