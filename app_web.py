@@ -28,45 +28,57 @@ df_roster = load_roster(user_id)
 with st.sidebar:
     st.title(f"🏀 Coach: {user_id}")
     tipo_sessione = st.radio("MODALITÀ:", ["Partita 🏟️", "Allenamento 🏃‍♂️"])
+    st.divider()
 
-    # RESET SESSIONE
-    if st.button("🚨 RESET DATI", type="primary", use_container_width=True):
-        st.session_state.shots = []
-        save_shots(user_id, []) # Svuota il DB per l'utente
-        st.rerun()
+    # --- GESTIONE ROSTER & SQUADRE ---
+    with st.expander("📂 Gestione Roster e Squadre"):
+        st.subheader("Crea Squadra")
+        nuova_sq = st.text_input("Nome Squadra (es: U19)").upper()
+        if st.button("Registra Squadra"):
+            if nuova_sq:
+                save_player_to_roster(user_id, "0", "COACH", "STAFF", nuova_sq)
+                st.success(f"Squadra {nuova_sq} creata!")
+                st.rerun()
+
+        st.divider()
+        st.subheader("Aggiunta Manuale Giocatore")
+        if all_teams:
+            sq_target = st.selectbox("Squadra:", all_teams, key="sq_man")
+            c1, c2 = st.columns([1, 3])
+            m_num = c1.text_input("N°", key="m_num")
+            m_nome = c2.text_input("Nome", key="m_nome").upper()
+            if st.button("Salva Giocatore"):
+                if m_nome and m_num:
+                    save_player_to_roster(user_id, m_num, m_nome, "G", sq_target)
+                    st.toast(f"{m_nome} salvato!")
+                    st.rerun()
+        else:
+            st.info("Crea prima una squadra.")
 
     st.divider()
 
-    # EXPORT REPORT PDF (da reports.py)
+    # --- EXPORT PDF ---
     if st.session_state.shots:
-        st.subheader("📊 Report Finale")
+        st.subheader("📊 Report")
         try:
             df_export = pd.DataFrame(st.session_state.shots)
-            # Determiniamo il nome squadra per il report
-            t_name = df_export[df_export['team'] != 'AVVERSARI']['team'].unique()[0] if not df_export.empty else "TEAM"
-            
-            pdf_bytes = generate_player_report(df_export, t_name)
-            st.download_button(
-                label="📥 Scarica Referto PDF",
-                data=pdf_bytes,
-                file_name=f"referto_{t_name}_{datetime.datetime.now().strftime('%d%m')}.pdf",
-                mime="application/pdf",
-                use_container_width=True
-            )
+            t_report = df_export[df_export['team'] != 'AVVERSARI']['team'].unique()[0] if not df_export.empty else "TEAM"
+            pdf_bytes = generate_player_report(df_export, t_report)
+            st.download_button("📥 Scarica Referto PDF", data=pdf_bytes, file_name=f"report_{t_report}.pdf", mime="application/pdf", use_container_width=True)
         except Exception as e:
             st.error(f"Errore PDF: {e}")
 
-    # GESTIONE ROSTER
-    with st.expander("📂 Gestione Roster"):
-        up_file = st.file_uploader("Carica CSV", type=["csv"])
-        if up_file:
-            df_up = pd.read_csv(up_file)
-            df_up.columns = [c.lower().strip() for c in df_up.columns]
-            if st.button("Salva Roster nel Cloud"):
-                for _, r in df_up.iterrows():
-                    save_player_to_roster(user_id, r.get('numero','0'), r.get('nome','?'), r.get('ruolo','G'), r.get('squadra','MIA SQ'))
-                st.success("Roster caricato!")
-                st.rerun()
+    # --- RESET & LOGOUT ---
+    st.divider()
+    if st.button("🚨 RESET TIRI", use_container_width=True, help="Cancella tutti i tiri della sessione"):
+        from engine import get_conn
+        get_conn().table("shots").delete().eq("user_id", user_id).execute()
+        st.session_state.shots = []
+        st.rerun()
+
+    if st.button("🚪 Logout", type="primary", use_container_width=True):
+        for k in list(st.session_state.keys()): del st.session_state[k]
+        st.rerun()
 
 # --- CORPO CENTRALE ---
 st.title(f"🏀 {tipo_sessione}")
