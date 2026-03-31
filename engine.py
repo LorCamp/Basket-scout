@@ -1,32 +1,31 @@
-import pandas as pd
-from streamlit_gsheets import GSheetsConnection
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
+import pandas as pd
 
-def get_connection():
-    # Crea la connessione con Google Sheets
+def get_conn():
+    # Crea la connessione usando l'URL definito nei Secrets
     return st.connection("gsheets", type=GSheetsConnection)
 
 def load_shots(user_id):
-    """Carica i tiri da Google Sheets."""
     try:
-        conn = get_connection()
-        # Legge il foglio 'Shots'
-        df = conn.read(worksheet="Shots", ttl="0s") # ttl=0 evita la cache
+        conn = get_conn()
+        # Legge i dati dal foglio specificato nei secrets
+        # ttl=0 serve per avere dati sempre freschi senza cache
+        df = conn.read(spreadsheet=st.secrets["public_gsheets_url"], ttl=0)
         if df.empty:
             return []
-        # Filtriamo per utente se aggiungi una colonna user_id, 
-        # altrimenti restituisce tutto
         return df.to_dict('records')
-    except Exception:
+    except Exception as e:
+        st.error(f"Errore caricamento: {e}")
         return []
 
 def save_shots(user_id, shots_list):
-    """Salva la lista azioni su Google Sheets."""
     if not shots_list:
         return
-    
-    conn = get_connection()
-    df = pd.DataFrame(shots_list)
-    
-    # Aggiorna il foglio Google
-    conn.update(worksheet="Shots", data=df)
+    try:
+        conn = get_conn()
+        df = pd.DataFrame(shots_list)
+        # Sovrascrive il foglio con i nuovi dati
+        conn.update(spreadsheet=st.secrets["public_gsheets_url"], data=df)
+    except Exception as e:
+        st.error(f"Errore salvataggio: {e}")
