@@ -8,13 +8,11 @@ def get_conn():
 def load_shots(user_id):
     """Carica solo i tiri dell'utente loggato da Supabase"""
     try:
-        conn = get_conn()
-        # Query: Seleziona tutto dalla tabella 'shots' dove user_id è uguale a...
-        res = conn.query("*", table="shots", ttl=0).eq("user_id", user_id).execute()
-        if res.data:
-            return res.data
-        return []
-    except Exception as e:
+        conn = st.connection("supabase", type=SupabaseConnection)
+        # IL FILTRO .eq È FONDAMENTALE PER ATTIVARE LA POLICY CORRETTAMENTE
+        res = conn.table("shots").select("*").eq("user_id", user_id).execute()
+        return res.data if res.data else []
+    except Exception:
         return []
 
 def save_shots(user_id, shots_list):
