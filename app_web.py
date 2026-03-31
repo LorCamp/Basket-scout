@@ -45,13 +45,21 @@ with st.sidebar:
     with st.expander("📂 Gestione Roster e Squadre", expanded=False):
         # A) Importazione CSV
         st.subheader("📥 Importa da CSV")
+        st.caption("Colonne attese: numero, nome, ruolo, squadra")
         up_file = st.file_uploader("Carica file .csv", type=["csv"], key="uploader")
         if up_file:
             df_up = pd.read_csv(up_file)
             df_up.columns = [c.lower().strip() for c in df_up.columns]
-            if st.button("Conferma Importazione"):
+            if st.button("Conferma Importazione Massiva"):
                 for _, r in df_up.iterrows():
-                    save_player_to_roster(user_id, r.get('numero','0'), r.get('nome','?'), r.get('ruolo','G'), r.get('squadra','MIA SQ'))
+                    # Salva con ruolo dal CSV o 'G' di default
+                    save_player_to_roster(
+                        user_id, 
+                        str(r.get('numero','0')), 
+                        str(r.get('nome','?')).upper(), 
+                        str(r.get('ruolo','G')).upper(), 
+                        str(r.get('squadra','MIA SQ')).upper()
+                    )
                 st.success("Roster Caricato!")
                 st.rerun()
         
@@ -61,26 +69,32 @@ with st.sidebar:
         nuova_sq_nome = st.text_input("Nome Team (es. U17)").upper()
         if st.button("Registra Team"):
             if nuova_sq_nome:
-                # Crea un coach fittizio per inizializzare la squadra
                 save_player_to_roster(user_id, "0", "COACH", "STAFF", nuova_sq_nome)
                 st.rerun()
 
         st.divider()
-        # C) Aggiunta Giocatore Manuale
+        # C) Aggiunta Giocatore Manuale (CON RUOLO)
         st.subheader("Aggiungi Giocatore")
         if all_teams:
             sq_sel = st.selectbox("A quale squadra?", all_teams)
-            c1, c2 = st.columns([1, 3])
-            m_num = c1.text_input("N°")
-            m_nome = c2.text_input("Nome").upper()
-            if st.button("Salva nel Database"):
+            c1, c2 = st.columns([1, 2])
+            m_num = c1.text_input("N°", placeholder="10")
+            m_nome = c2.text_input("Nome", placeholder="COGNOME N.")
+            
+            # Selezione del Ruolo
+            m_ruolo = st.selectbox("Ruolo:", ["Play (PG)", "Guardia (SG)", "Ala (SF)", "Ala Grande (PF)", "Centro (C)"])
+            # Estraiamo solo la sigla tra parentesi per il DB
+            ruolo_codice = m_ruolo.split('(')[1].replace(')', '')
+
+            if st.button("Salva nel Database", type="secondary", use_container_width=True):
                 if m_nome and m_num:
-                    save_player_to_roster(user_id, m_num, m_nome, "G", sq_sel)
-                    st.toast(f"{m_nome} aggiunto!")
+                    save_player_to_roster(user_id, m_num, m_nome.upper(), ruolo_codice, sq_sel)
+                    st.toast(f"{m_nome} ({ruolo_codice}) aggiunto!")
                     st.rerun()
+                else:
+                    st.error("Inserisci Nome e Numero!")
         else:
             st.info("Crea prima una squadra.")
-
     st.divider()
 
     # --- REPORT PDF ---
