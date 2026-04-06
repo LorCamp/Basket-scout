@@ -11,6 +11,24 @@ def get_conn():
         key=st.secrets["connections"]["supabase"]["key"]
     )
 
+# --- GESTIONE UTENTE --- 
+
+def save_user_pref(user_id, team_name):
+    try:
+        conn = get_conn()
+        conn.table("profiles").upsert({"id": user_id, "pref_team": team_name}).execute()
+    except Exception as e:
+        st.error(f"Errore salvataggio preferenze: {e}")
+
+def load_user_pref(user_id):
+    try:
+        conn = get_conn()
+        res = conn.table("profiles").select("pref_team").eq("id", user_id).execute()
+        return res.data[0]['pref_team'] if res.data else None
+    except:
+        return None
+
+
 # --- GESTIONE TIRI (Tabella 'shots') ---
 
 def load_shots(user_id):
